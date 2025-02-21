@@ -39,6 +39,9 @@ async def create_trip(
     planner: TripPlanner = Depends(get_trip_planner)
 ) -> TripResponse:
     """Create a new trip with initial planning."""
+    # Get a database session
+    session = next(get_db())
+    
     try:
         # Create trip instance
         trip = Trip(
@@ -49,9 +52,9 @@ async def create_trip(
             status=TripStatus.PLANNING,
             preferences=trip_data.preferences.dict()
         )
-        db.add(trip)
-        db.commit()
-        db.refresh(trip)
+        session.add(trip)
+        session.commit()
+        session.refresh(trip)
         
         # Research destination
         research_results = await planner.research_destination(
@@ -66,23 +69,25 @@ async def create_trip(
         # Create itinerary
         itinerary = await planner.create_itinerary(trip, research_results)
         for day in itinerary:
-            db.add(day)
+            session.add(day)
         
         # Calculate budget
         budget = planner.calculate_budget(trip, itinerary)
-        db.add(budget)
+        session.add(budget)
         
-        db.commit()
-        db.refresh(trip)
+        session.commit()
+        session.refresh(trip)
         
         return trip
         
     except Exception as e:
-        db.rollback()
+        session.rollback()
         raise HTTPException(
             status_code=400,
             detail=f"Error creating trip: {str(e)}"
         )
+    finally:
+        session.close()
 
 @router.get(
     "/",
