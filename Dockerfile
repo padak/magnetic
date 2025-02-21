@@ -22,14 +22,18 @@ ENV PATH="${POETRY_HOME}/bin:$PATH"
 # Set working directory
 WORKDIR /app
 
+# Copy requirements first to leverage Docker cache
+COPY requirements.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
 # Copy project files
 COPY . .
 
-# Install dependencies
-RUN pip install --no-cache-dir -e .
-
-# Install Playwright dependencies
-RUN playwright install --with-deps chromium
+# Install the package in development mode and Playwright
+RUN pip install -e . && \
+    playwright install --with-deps chromium
 
 # Expose port for FastAPI
 EXPOSE 8000

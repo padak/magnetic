@@ -4,8 +4,8 @@
 
 ```mermaid
 graph TB
-    User[User/Family] --> UI[Web Interface]
-    UI --> Orchestrator[Orchestrator Agent]
+    User[User/Family] --> API[FastAPI Interface]
+    API --> Orchestrator[Orchestrator Agent]
     
     subgraph "Agent System"
         Orchestrator --> WebSurfer[WebSurfer Agent]
@@ -24,9 +24,14 @@ graph TB
     end
     
     subgraph "Storage Layer"
-        Storage --> LocalFS[Local FileSystem]
-        Storage --> Database[(Database)]
-        Storage --> Cache[(Redis Cache)]
+        Storage --> PostgreSQL[(PostgreSQL)]
+        Storage --> Redis[(Redis Cache)]
+        Storage --> FileStorage[File Storage]
+    end
+
+    subgraph "Monitoring"
+        API --> HealthChecks[Health Checks]
+        HealthChecks --> ServiceStatus[Service Status]
     end
 ```
 
@@ -35,162 +40,99 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant U as User
+    participant API as FastAPI
     participant O as Orchestrator
     participant W as WebSurfer
-    participant C as Coder
-    participant F as FileSurfer
-    participant DB as Database
+    participant DB as PostgreSQL
+    participant R as Redis
     
-    U->>O: Submit Trip Requirements
-    activate O
+    U->>API: Submit Trip Requirements
+    API->>DB: Validate User & Session
+    API->>O: Forward Request
     
-    O->>W: Request Destination Research
+    O->>R: Check Cache
+    O->>W: Request Data Collection
     activate W
-    W->>W: Search Travel Options
-    W-->>O: Return Research Results
+    W->>W: Collect Travel Data
+    W-->>O: Return Results
     deactivate W
     
-    O->>C: Process Data & Create Plan
-    activate C
-    C->>C: Generate Itinerary
-    C->>C: Calculate Budget
-    C-->>O: Return Processed Plan
-    deactivate C
-    
-    O->>F: Generate Documents
-    activate F
-    F->>DB: Store Trip Plan
-    F->>F: Create PDF Reports
-    F-->>O: Return Document Links
-    deactivate F
-    
-    O-->>U: Present Complete Plan
-    deactivate O
+    O->>DB: Store Trip Data
+    O->>R: Update Cache
+    O-->>API: Return Response
+    API-->>U: Present Results
 ```
 
 ## Component Dependencies
 
 ```mermaid
 graph TD
-    subgraph "Frontend Layer"
-        UI[Web Interface]
-        API[API Gateway]
+    subgraph "API Layer"
+        FastAPI[FastAPI]
+        Endpoints[API Endpoints]
+        Health[Health Checks]
     end
     
     subgraph "Agent Layer"
-        Orchestrator[Orchestrator Agent]
-        WebSurfer[WebSurfer Agent]
-        Coder[Coder Agent]
-        FileSurfer[FileSurfer Agent]
+        Base[Base Agent]
+        Orchestrator[Orchestrator]
+        WebSurfer[WebSurfer]
+        TaskSystem[Task System]
     end
     
     subgraph "Service Layer"
-        AuthService[Authentication]
-        CacheService[Caching Service]
-        LoggingService[Logging Service]
+        Config[Configuration]
+        Logging[Logging Service]
+        Cache[Redis Cache]
     end
     
     subgraph "Data Layer"
-        DB[(Database)]
-        Cache[(Redis)]
-        FileStore[File Storage]
+        Models[SQLAlchemy Models]
+        Migrations[Alembic]
+        PostgreSQL[(PostgreSQL)]
     end
     
-    UI --> API
-    API --> Orchestrator
+    FastAPI --> Endpoints
+    FastAPI --> Health
     
-    Orchestrator --> AuthService
-    Orchestrator --> WebSurfer
-    Orchestrator --> Coder
-    Orchestrator --> FileSurfer
+    Endpoints --> Orchestrator
+    Orchestrator --> Base
+    WebSurfer --> Base
+    Orchestrator --> TaskSystem
     
-    WebSurfer --> CacheService
-    Coder --> CacheService
-    FileSurfer --> FileStore
+    Base --> Config
+    Base --> Logging
+    TaskSystem --> Cache
     
-    AuthService --> DB
-    CacheService --> Cache
-    LoggingService --> FileStore
-```
-
-## State Management
-
-```mermaid
-stateDiagram-v2
-    [*] --> Initialization
-    
-    Initialization --> GatheringRequirements
-    
-    GatheringRequirements --> ResearchingDestinations
-    ResearchingDestinations --> PlanningItinerary
-    ResearchingDestinations --> GatheringRequirements: Insufficient Info
-    
-    PlanningItinerary --> CalculatingBudget
-    PlanningItinerary --> ResearchingDestinations: Need More Research
-    
-    CalculatingBudget --> GeneratingDocuments
-    CalculatingBudget --> PlanningItinerary: Budget Constraints
-    
-    GeneratingDocuments --> ReviewingPlan
-    
-    ReviewingPlan --> [*]: Plan Approved
-    ReviewingPlan --> PlanningItinerary: Revisions Needed
+    Endpoints --> Models
+    Models --> PostgreSQL
+    Migrations --> PostgreSQL
 ```
 
 ## Deployment Architecture
 
 ```mermaid
 graph TB
-    subgraph "Production Environment"
-        LB[Load Balancer]
+    subgraph "Docker Environment"
+        API[FastAPI App]
+        DB[(PostgreSQL)]
+        Cache[(Redis)]
         
-        subgraph "Application Cluster"
-            API1[API Server 1]
-            API2[API Server 2]
-            Worker1[Worker 1]
-            Worker2[Worker 2]
-        end
-        
-        subgraph "Data Storage"
-            Master[(Primary DB)]
-            Replica[(DB Replica)]
-            Redis1[(Redis Primary)]
-            Redis2[(Redis Replica)]
-        end
-        
-        subgraph "Monitoring"
-            Prometheus[Prometheus]
-            Grafana[Grafana]
-            ELK[ELK Stack]
-        end
+        API --> DB
+        API --> Cache
     end
     
-    Client-->LB
-    LB-->API1
-    LB-->API2
-    API1-->Worker1
-    API1-->Worker2
-    API2-->Worker1
-    API2-->Worker2
+    subgraph "Health Monitoring"
+        Health[Health Checks]
+        Services[Service Status]
+        
+        Health --> Services
+        Services --> DB
+        Services --> Cache
+    end
     
-    Worker1-->Master
-    Worker2-->Master
-    Master-->Replica
-    
-    Worker1-->Redis1
-    Worker2-->Redis1
-    Redis1-->Redis2
-    
-    API1-->Prometheus
-    API2-->Prometheus
-    Worker1-->Prometheus
-    Worker2-->Prometheus
-    Prometheus-->Grafana
-    
-    API1-->ELK
-    API2-->ELK
-    Worker1-->ELK
-    Worker2-->ELK
+    Client-->API
+    Health-->API
 ```
 
 ## Development Workflow
@@ -200,38 +142,25 @@ gitGraph
     commit id: "initial"
     branch develop
     checkout develop
-    commit id: "feature/setup"
-    branch feature/orchestrator
-    commit id: "add-orchestrator"
-    commit id: "test-orchestrator"
-    checkout develop
-    merge feature/orchestrator
+    commit id: "project-setup"
+    commit id: "docker-setup"
+    commit id: "database-models"
+    commit id: "base-agent"
+    commit id: "orchestrator"
+    commit id: "health-checks"
     branch feature/websurfer
-    commit id: "add-websurfer"
-    commit id: "test-websurfer"
+    commit id: "init-websurfer"
     checkout develop
     merge feature/websurfer
-    branch feature/coder
-    commit id: "add-coder"
-    commit id: "test-coder"
-    checkout develop
-    merge feature/coder
-    branch feature/filesurfer
-    commit id: "add-filesurfer"
-    commit id: "test-filesurfer"
-    checkout develop
-    merge feature/filesurfer
-    checkout main
-    merge develop
-    commit id: "release-v1.0"
+    branch feature/redis-cache
+    commit id: "init-redis"
 ```
 
 These diagrams provide different views of the system architecture:
-1. **System Overview**: Shows the high-level components and their interactions
+1. **System Overview**: Shows the current high-level components and their interactions
 2. **Data Flow**: Illustrates the sequence of operations during a typical trip planning process
 3. **Component Dependencies**: Details how different components depend on each other
-4. **State Management**: Shows the different states of the trip planning process
-5. **Deployment Architecture**: Illustrates the production environment setup
-6. **Development Workflow**: Shows the Git branching strategy and development process
+4. **Deployment Architecture**: Shows the current Docker environment setup
+5. **Development Workflow**: Reflects our current Git branching strategy and progress
 
-The diagrams can be updated as the architecture evolves or requirements change. 
+The diagrams will be updated as we implement new features and components. 

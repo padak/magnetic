@@ -6,48 +6,66 @@
 - Basic project structure
 - Virtual environment setup
 - Core dependencies installation
-- Basic configuration system
-- Documentation framework
-
-### 🔄 In Progress
-- Environment variable configuration
-- Database setup
+- Configuration system
+- Logging framework
+- Docker environment with PostgreSQL and Redis
+- Health check endpoints
+- Database models and migrations
+- Base agent system
+- Task management system
 - Testing framework
 
+### 🔄 In Progress
+- Redis caching implementation
+- WebSurfer agent development
+- API endpoints creation
+- File storage system
+
 ### 📅 Planned
-- Agent implementation
-- API integrations
-- Storage systems
-- Security features
+- Authentication system
+- Travel API integrations
+- Document generation
+- Monitoring system
 
 ## Core Framework
-- **Magentic-One Framework**: Built on autogen-agentchat for multi-agent orchestration
-  - Version: Latest stable release
-  - Primary Model: GPT-4o for optimal reasoning capabilities
-  - Dependencies: `autogen-agentchat`, `autogen-ext[magentic-one,openai]`
+- **FastAPI Framework**: Modern web framework for building APIs
+  - Version: 0.100+
+  - Async support for high performance
+  - OpenAPI documentation
+  - Dependencies: `fastapi`, `uvicorn[standard]`
 
 ## Project Structure
 ```
 magnetic/
 ├── docs/                    # Project documentation
-│   ├── project_scope.md     # Project scope and features
-│   ├── technical_architecture.md
-│   ├── architecture_diagrams.md
-│   └── work_plan.md        # Development timeline and tasks
 ├── src/
 │   └── magnetic/
 │       ├── agents/         # Agent implementations
-│       ├── core/          # Core functionality
-│       ├── utils/         # Utility functions
-│       ├── models/        # Data models
-│       ├── services/      # Business logic
-│       ├── config/        # Configuration
-│       │   └── settings.py
+│       │   ├── base.py     # Base agent class
+│       │   └── orchestrator.py # Orchestrator implementation
+│       ├── api/            # API endpoints
+│       │   └── main.py     # FastAPI application
+│       ├── core/           # Core functionality
+│       ├── utils/          # Utility functions
+│       │   └── logging.py  # Logging configuration
+│       ├── models/         # Data models
+│       │   ├── base.py     # Base model
+│       │   └── trip.py     # Trip-related models
+│       ├── services/       # Business logic
+│       ├── config/         # Configuration
+│       │   └── settings.py # Settings management
 │       └── __init__.py
 ├── tests/                  # Test suite
-├── venv/                   # Virtual environment
-├── .gitignore
-└── requirements.txt        # Project dependencies
+│   ├── test_config.py     # Configuration tests
+│   └── test_agents.py     # Agent system tests
+├── scripts/               # Utility scripts
+│   └── test_docker.py    # Docker environment tests
+├── migrations/           # Database migrations
+├── .env.example         # Environment variables template
+├── requirements.txt     # Project dependencies
+├── setup.py            # Package configuration
+├── Dockerfile          # Container definition
+└── docker-compose.yml  # Container orchestration
 ```
 
 ## Agent Architecture
@@ -207,38 +225,4 @@ class Config:
 
 ### 2. Testing (To Be Implemented)
 - `pytest`: For unit testing
-- `pytest-asyncio`: For async testing
-- `pytest-cov`: For coverage reporting
-
-### 3. Documentation
-- Sphinx: For API documentation (planned)
-- MkDocs: For user documentation (planned)
-
-## Dependencies Installation
-```bash
-# Core dependencies
-pip install -r requirements.txt
-playwright install --with-deps chromium
-```
-
-## Configuration Management
-Environment variables will be managed through `.env` files:
-
-```bash
-# .env.example
-OPENAI_API_KEY=your-api-key
-AMADEUS_API_KEY=your-amadeus-key
-MAPS_API_KEY=your-maps-key
-WEATHER_API_KEY=your-weather-key
-
-# Database
-DATABASE_URL=sqlite:///./magnetic.db
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
-
-# Agent Settings
-MODEL_NAME=gpt-4o
-```
-
-This technical architecture document serves as a blueprint for development and will be updated as the project evolves. All version numbers should be regularly reviewed and updated to maintain security and compatibility. 
+- `
