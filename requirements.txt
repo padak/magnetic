@@ -23,9 +23,12 @@ markdown
 SQLAlchemy>=2.0.38
 alembic==1.13.1
 aiosqlite
+psycopg2-binary>=2.9.9  # PostgreSQL adapter
+asyncpg>=0.29.0  # Async PostgreSQL
 
 # Caching
 redis>=5.0
+aioredis>=2.0  # Async Redis client
 
 # API
 fastapi>=0.100
