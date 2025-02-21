@@ -2,11 +2,12 @@
 
 from datetime import datetime
 from typing import Any
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy import Column, DateTime, Integer
 from sqlalchemy.orm import Mapped
 
-Base = declarative_base()
+# Create a base class for declarative models
+Base: DeclarativeMeta = declarative_base()
 
 class BaseModel(Base):
     """Base model class with common fields."""

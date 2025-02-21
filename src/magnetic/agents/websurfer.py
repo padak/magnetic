@@ -1,11 +1,12 @@
 """WebSurfer agent implementation for web scraping and API interactions."""
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 import json
 import httpx
 from playwright.async_api import async_playwright, Browser, Page
+from amadeus import Client, ResponseError
 
 from .base import BaseAgent
 from ..config.settings import config
@@ -24,7 +25,11 @@ class WebSurferAgent(BaseAgent):
         super().__init__(name, config)
         self._browser: Optional[Browser] = None
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._amadeus_client: Optional[Client] = None
         self.logger = get_logger(__name__)
+        self.endpoints = {
+            'amadeus': 'https://test.api.amadeus.com'
+        }
 
     async def initialize(self) -> None:
         """Initialize browser and HTTP client."""
@@ -34,6 +39,7 @@ class WebSurferAgent(BaseAgent):
         self.state.update({
             'browser_ready': False,
             'http_client_ready': False,
+            'amadeus_ready': False,
             'last_request_time': None,
             'requests_made': 0,
             'cache_hits': 0,
@@ -55,6 +61,14 @@ class WebSurferAgent(BaseAgent):
                 limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
             )
             self.state['http_client_ready'] = True
+            
+            # Initialize Amadeus client
+            self._amadeus_client = Client(
+                client_id=self.config.api_keys["amadeus_key"],
+                client_secret=self.config.api_keys["amadeus_secret"],
+                hostname='test'  # Use test environment
+            )
+            self.state['amadeus_ready'] = True
             
             self.logger.info("WebSurfer agent initialized successfully")
             
@@ -146,7 +160,7 @@ class WebSurferAgent(BaseAgent):
             }
 
     async def _handle_weather_api(self, task: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle weather API requests.
+        """Handle weather API requests using Open-Meteo.
         
         Args:
             task: Task specification with location
@@ -160,23 +174,38 @@ class WebSurferAgent(BaseAgent):
         location = task.get('location')
         if not location:
             raise ValueError("Location is required for weather info")
-            
-        api_key = self.config.api_keys.get('weather')
-        if not api_key:
-            raise ValueError("Weather API key not configured")
-            
-        url = f"http://api.openweathermap.org/data/2.5/weather"
+        
+        # First get coordinates using Google Maps API
+        location_response = await self._handle_location_api({
+            'type': 'location_info',
+            'location': location
+        })
+        
+        if not location_response.get('data', {}).get('results'):
+            raise ValueError(f"Could not find location: {location}")
+        
+        # Extract coordinates
+        location_data = location_response['data']['results'][0]
+        coords = location_data['geometry']['location']
+        
+        # Get weather data from Open-Meteo
+        weather_url = "https://api.open-meteo.com/v1/forecast"
         params = {
-            'q': location,
-            'appid': api_key,
-            'units': 'metric'
+            'latitude': coords['lat'],
+            'longitude': coords['lng'],
+            'current': ['temperature_2m', 'relative_humidity_2m', 'weather_code', 'wind_speed_10m'],
+            'daily': ['temperature_2m_max', 'temperature_2m_min', 'precipitation_sum', 'weather_code'],
+            'temperature_unit': 'celsius',
+            'wind_speed_unit': 'kmh',
+            'timezone': 'auto'
         }
         
-        response = await self._http_client.get(url, params=params)
+        response = await self._http_client.get(weather_url, params=params)
         response.raise_for_status()
         
         return {
             'location': location,
+            'coordinates': coords,
             'timestamp': datetime.utcnow().isoformat(),
             'data': response.json()
         }
@@ -218,61 +247,103 @@ class WebSurferAgent(BaseAgent):
         }
 
     async def _handle_travel_api(self, task: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle travel-related API requests.
-        
-        Args:
-            task: Task specification with travel parameters
-            
-        Returns:
-            Dict containing travel data
-        """
-        if not self._http_client:
-            raise RuntimeError("HTTP client not initialized")
-            
-        api_key = self.config.api_keys.get('amadeus')
-        if not api_key:
-            raise ValueError("Travel API key not configured")
-            
-        # Example using Amadeus API
+        """Handle travel-related API requests using Amadeus SDK."""
+        if not self._amadeus_client:
+            raise RuntimeError("Amadeus client not initialized")
+
         search_type = task.get('search_type')
-        params = task.get('parameters', {})
-        
-        # Map search types to endpoints
-        endpoints = {
-            'flights': '/v1/shopping/flight-offers',
-            'hotels': '/v2/shopping/hotel-offers',
-            'activities': '/v1/shopping/activities'
-        }
-        
-        if search_type not in endpoints:
-            raise ValueError(f"Invalid search type: {search_type}")
-            
-        base_url = "https://test.api.amadeus.com"  # Use test endpoint for development
-        endpoint = endpoints[search_type]
-        
-        # First, get access token
-        auth_response = await self._http_client.post(
-            f"{base_url}/v1/security/oauth2/token",
-            data={
-                'grant_type': 'client_credentials',
-                'client_id': api_key,
-                'client_secret': self.config.api_keys.get('amadeus_secret', '')
+        if not search_type:
+            raise ValueError("No search_type specified in travel API task")
+
+        try:
+            if search_type == 'hotels':
+                # First search for hotels in the city
+                city_code = task['parameters'].get('cityCode')
+                if not city_code:
+                    raise ValueError("No cityCode provided for hotel search")
+
+                # Search hotels in city
+                hotels_response = self._amadeus_client.reference_data.locations.hotels.by_city.get(
+                    cityCode=city_code,
+                    radius=task['parameters'].get('radius', 5),
+                    radiusUnit=task['parameters'].get('radiusUnit', 'KM'),
+                    amenities=task['parameters'].get('amenities', []),
+                    ratings=task['parameters'].get('ratings', []),
+                    hotelSource='ALL'
+                )
+
+                hotels = hotels_response.data
+                if not hotels:
+                    return {
+                        'status': 'success',
+                        'search_type': 'hotels',
+                        'data': {'hotels': [], 'message': 'No hotels found in the specified city'}
+                    }
+
+                # Get hotel IDs (limit to first 10 to avoid too many requests)
+                hotel_ids = [hotel['hotelId'] for hotel in hotels[:10]]
+
+                # Search for offers for these hotels
+                offers_response = self._amadeus_client.shopping.hotel_offers_search.get(
+                    hotelIds=','.join(hotel_ids),
+                    adults=str(task['parameters'].get('adults', 2)),
+                    checkInDate=task['parameters']['checkInDate'],
+                    checkOutDate=task['parameters']['checkOutDate'],
+                    roomQuantity=str(task['parameters'].get('roomQuantity', 1)),
+                    paymentPolicy=task['parameters'].get('paymentPolicy', 'NONE'),
+                    bestRateOnly=True
+                )
+
+                return {
+                    'status': 'success',
+                    'search_type': 'hotels',
+                    'data': {
+                        'hotels': hotels,  # Original hotel list with details
+                        'offers': offers_response.data,  # Available offers
+                        'total_hotels_found': len(hotels),
+                        'hotels_with_offers': len(offers_response.data),
+                    }
+                }
+
+            elif search_type == 'flights':
+                # Validate flight search parameters
+                params = task.get('parameters', {})
+                required_params = ['originLocationCode', 'destinationLocationCode', 'departureDate']
+                if not all(param in params for param in required_params):
+                    raise ValueError(f"Missing required flight parameters. Required: {required_params}")
+
+                # Search for flights using the SDK
+                flight_response = self._amadeus_client.shopping.flight_offers_search.get(
+                    originLocationCode=params['originLocationCode'],
+                    destinationLocationCode=params['destinationLocationCode'],
+                    departureDate=params['departureDate'],
+                    adults=params.get('adults', 1),
+                    max=params.get('max', 10)
+                )
+
+                return {
+                    'status': 'success',
+                    'search_type': 'flights',
+                    'data': flight_response.data
+                }
+
+            else:
+                raise ValueError(f"Unknown search_type: {search_type}")
+
+        except ResponseError as error:
+            return {
+                'status': 'error',
+                'search_type': search_type,
+                'error': {
+                    'code': error.response.status_code,
+                    'message': error.response.body
+                }
             }
-        )
-        auth_response.raise_for_status()
-        access_token = auth_response.json()['access_token']
-        
-        # Make API request
-        headers = {'Authorization': f'Bearer {access_token}'}
-        response = await self._http_client.get(
-            f"{base_url}{endpoint}",
-            params=params,
-            headers=headers
-        )
-        response.raise_for_status()
-        
-        return {
-            'search_type': search_type,
-            'timestamp': datetime.utcnow().isoformat(),
-            'data': response.json()
-        } 
+        except Exception as e:
+            return {
+                'status': 'error',
+                'search_type': search_type,
+                'error': {
+                    'message': str(e)
+                }
+            } 

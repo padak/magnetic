@@ -1,30 +1,34 @@
-"""FastAPI application entry point."""
+"""Main FastAPI application module."""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from datetime import timedelta
 
-from magnetic.config.settings import config
+from ..config.settings import Config
+from ..config.logging import setup_logging
 from magnetic.database import get_db, init_db
 from magnetic.services.cache import cache
 from magnetic.utils.decorators import cached
 from .routes import trips
 
+# Set up logging
+setup_logging()
+
+# Create FastAPI application
 app = FastAPI(
     title="Magnetic API",
-    description="US Family Trip Planner API",
-    version="0.1.0",
-    debug=config.debug
+    description="API for the Magnetic travel planning application",
+    version="0.1.0"
 )
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Frontend development server
+    allow_origins=["*"],  # TODO: Configure this properly for production
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include routers
@@ -48,7 +52,7 @@ async def root():
     return {
         "status": "ok",
         "version": "0.1.0",
-        "environment": config.environment
+        "environment": Config.environment
     }
 
 @app.get("/health")

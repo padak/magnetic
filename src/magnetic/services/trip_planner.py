@@ -58,18 +58,30 @@ class TripPlanner:
                 'type': 'travel_search',
                 'search_type': 'activities',
                 'parameters': {
-                    'location': location,
-                    'startDate': travel_dates['start'].strftime('%Y-%m-%d'),
-                    'endDate': travel_dates['end'].strftime('%Y-%m-%d')
+                    'location': location
                 }
             }
             activities_info = await self.websurfer.execute(activities_task)
             
+            # Search for hotels
+            hotel_task = {
+                'type': 'travel_search',
+                'search_type': 'hotels',
+                'parameters': {
+                    'location': location,
+                    'checkInDate': travel_dates['start'].strftime('%Y-%m-%d'),
+                    'checkOutDate': travel_dates['end'].strftime('%Y-%m-%d'),
+                    'adults': preferences.get('adults', 2)
+                }
+            }
+            hotel_info = await self.websurfer.execute(hotel_task)
+            
             return {
                 'destination': location,
-                'weather_forecast': weather_info['data'],
-                'location_details': location_info['data'],
-                'available_activities': activities_info['data'],
+                'weather_forecast': weather_info.get('data', {}),
+                'location_details': location_info.get('data', {}),
+                'available_activities': activities_info.get('data', {}).get('results', []),
+                'available_hotels': hotel_info.get('data', {}).get('data', []),
                 'travel_dates': {
                     'start': travel_dates['start'].isoformat(),
                     'end': travel_dates['end'].isoformat()
@@ -270,26 +282,33 @@ class TripPlanner:
             Budget instance with detailed breakdown
         """
         total = Decimal('0')
-        breakdown = {
-            'activities': Decimal('0'),
-            'accommodations': Decimal('0'),
-            'transportation': trip.preferences.get('transportation_budget', Decimal('0')),
-            'food': trip.preferences.get('food_budget', Decimal('0')),
-            'miscellaneous': trip.preferences.get('misc_budget', Decimal('0'))
-        }
+        activities_cost = Decimal('0')
+        accommodations_cost = Decimal('0')
+        transportation_cost = Decimal(str(trip.preferences.get('transportation_budget', 0)))
+        food_cost = Decimal(str(trip.preferences.get('food_budget', 0)))
+        misc_cost = Decimal(str(trip.preferences.get('misc_budget', 0)))
         
         # Calculate costs from itinerary
         for day in itinerary:
             # Activities
             for activity in day.activities:
-                breakdown['activities'] += activity.cost
+                activities_cost += activity.cost
             
             # Accommodation
             if day.accommodation:
-                breakdown['accommodations'] += day.accommodation.cost
+                accommodations_cost += day.accommodation.cost
         
         # Calculate total
-        total = sum(breakdown.values())
+        total = activities_cost + accommodations_cost + transportation_cost + food_cost + misc_cost
+        
+        # Convert Decimal values to strings for JSON serialization
+        breakdown = {
+            'activities': str(activities_cost),
+            'accommodations': str(accommodations_cost),
+            'transportation': str(transportation_cost),
+            'food': str(food_cost),
+            'miscellaneous': str(misc_cost)
+        }
         
         return Budget(
             trip_id=trip.id,

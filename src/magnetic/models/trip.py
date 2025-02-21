@@ -25,6 +25,7 @@ class Trip(BaseModel):
 
     title: Mapped[str] = Column(String(255), nullable=False)
     description: Mapped[Optional[str]] = Column(String(1000))
+    destination: Mapped[str] = Column(String(255), nullable=False)
     start_date: Mapped[datetime] = Column(DateTime, nullable=False)
     end_date: Mapped[datetime] = Column(DateTime, nullable=False)
     status: Mapped[TripStatus] = Column(Enum(TripStatus), default=TripStatus.DRAFT, nullable=False)

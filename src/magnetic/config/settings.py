@@ -56,7 +56,8 @@ class Config:
         """Load configuration from environment variables."""
         api_keys = {
             "openai": os.getenv("OPENAI_API_KEY", ""),
-            "amadeus": os.getenv("AMADEUS_API_KEY", ""),
+            "amadeus_key": os.getenv("AMADEUS_API_KEY", ""),
+            "amadeus_secret": os.getenv("AMADEUS_API_SECRET", ""),
             "maps": os.getenv("MAPS_API_KEY", ""),
             "weather": os.getenv("WEATHER_API_KEY", ""),
         }
@@ -92,6 +93,8 @@ class Config:
         required_keys = {
             "OPENAI_API_KEY": self.api_keys["openai"],
             "DATABASE_URL": self.storage_settings["database_url"],
+            "AMADEUS_API_KEY": self.api_keys["amadeus_key"],
+            "AMADEUS_API_SECRET": self.api_keys["amadeus_secret"],
         }
         
         missing_keys = [key for key, value in required_keys.items() if not value]
