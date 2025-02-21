@@ -1,0 +1,44 @@
+# Core dependencies
+autogen-agentchat
+autogen-ext[magentic-one,openai]
+
+# Web automation
+playwright>=1.40
+
+# Data processing
+pandas>=2.1
+numpy>=1.24
+
+# Visualization
+plotly>=5.18
+folium
+matplotlib
+
+# Document generation
+fpdf2
+jinja2
+markdown
+
+# Database
+SQLAlchemy>=2.0
+alembic
+aiosqlite
+
+# Caching
+redis>=5.0
+
+# API
+fastapi>=0.100
+uvicorn[standard]
+python-dotenv
+
+# Testing
+pytest>=7.0
+pytest-asyncio
+pytest-cov
+
+# Development tools
+black
+pylint
+mypy
+pre-commit 

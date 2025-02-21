@@ -4,3 +4,4 @@ Use pip to install the dependencies.
 
 Use pip freeze > requirements.txt to freeze the dependencies.
 
+When you're done with some tangible task, commit the changes to the repository and also update work_plan.md.
