@@ -1,6 +1,9 @@
 # Core dependencies
-autogen-agentchat
-autogen-ext[magentic-one,openai]
+autogen-agentchat>=0.2.0
+autogen-ext[magentic-one,openai]>=0.2.0
+pyautogen>=0.2.0
+autogen-core>=0.2.0
+autogen>=0.2.0  # Added for code executors
 
 # Web automation
 playwright>=1.40
