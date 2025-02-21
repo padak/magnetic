@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from datetime import timedelta
 
@@ -15,6 +16,15 @@ app = FastAPI(
     description="US Family Trip Planner API",
     version="0.1.0",
     debug=config.debug
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Frontend development server
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 # Include routers
