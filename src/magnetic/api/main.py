@@ -3,8 +3,12 @@
 from fastapi import FastAPI
 from sqlalchemy import text
 import redis.asyncio as redis
+from datetime import timedelta
+
 from magnetic.config.settings import config
 from magnetic.database import get_db
+from magnetic.services.cache import cache
+from magnetic.utils.decorators import cached
 
 app = FastAPI(
     title="Magnetic API",
@@ -13,7 +17,18 @@ app = FastAPI(
     debug=config.debug
 )
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup."""
+    await cache.connect()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up services on shutdown."""
+    await cache.disconnect()
+
 @app.get("/")
+@cached(expire=timedelta(minutes=5))
 async def root():
     """Root endpoint."""
     return {
@@ -40,10 +55,11 @@ async def health():
     
     # Test Redis connection
     try:
-        redis_client = redis.from_url(config.storage_settings["redis_url"])
-        await redis_client.ping()
-        services["redis"] = "healthy"
-        await redis_client.close()
+        if await cache.exists("health_check"):
+            services["redis"] = "healthy"
+        else:
+            await cache.set("health_check", "ok", expire=60)
+            services["redis"] = "healthy"
     except Exception as e:
         services["redis"] = f"error: {str(e)}"
     
