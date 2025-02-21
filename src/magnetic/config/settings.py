@@ -14,11 +14,14 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 
 # Database settings
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./magnetic.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///magnetic.db")
 
 @dataclass
 class Config:
     """Application configuration."""
+    
+    # Singleton instance
+    _instance = None
     
     # API configurations
     api_keys: Dict[str, str]
@@ -35,6 +38,18 @@ class Config:
     # Environment
     debug: bool
     environment: str
+    
+    @property
+    def DATABASE_URL(self) -> str:
+        """Get the database URL."""
+        return self.storage_settings["database_url"]
+
+    @classmethod
+    def get_instance(cls) -> 'Config':
+        """Get the singleton instance of Config."""
+        if cls._instance is None:
+            cls._instance = cls.load_from_env()
+        return cls._instance
 
     @classmethod
     def load_from_env(cls) -> 'Config':
@@ -84,4 +99,4 @@ class Config:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_keys)}")
 
 # Create global config instance
-config = Config.load_from_env() 
+config = Config.get_instance() 

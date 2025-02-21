@@ -20,8 +20,8 @@ jinja2
 markdown
 
 # Database
-SQLAlchemy>=2.0
-alembic
+SQLAlchemy>=2.0.38
+alembic==1.13.1
 aiosqlite
 
 # Caching
@@ -30,10 +30,10 @@ redis>=5.0
 # API
 fastapi>=0.100
 uvicorn[standard]
-python-dotenv
+python-dotenv==1.0.1
 
 # Testing
-pytest>=7.0
+pytest==8.0.2
 pytest-asyncio
 pytest-cov
 
