@@ -3,6 +3,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+import logging
 
 from ...database import get_db
 from ...models.trip import Trip, TripStatus
@@ -15,6 +16,8 @@ from ..schemas import (
     TripListResponse,
     ErrorResponse
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -39,22 +42,34 @@ async def create_trip(
     planner: TripPlanner = Depends(get_trip_planner)
 ) -> TripResponse:
     """Create a new trip with initial planning."""
-    # Get a database session
-    session = next(get_db())
+    logger.info("Entering create_trip endpoint")
+    logger.info(f"Received trip data: {trip_data}")
+    logger.info(f"Database session object: {db}")
+    logger.info(f"Session type: {type(db)}")
     
     try:
         # Create trip instance
         trip = Trip(
             title=trip_data.title,
             description=trip_data.description,
+            destination=trip_data.destination,
             start_date=trip_data.start_date,
             end_date=trip_data.end_date,
             status=TripStatus.PLANNING,
             preferences=trip_data.preferences.dict()
         )
-        session.add(trip)
-        session.commit()
-        session.refresh(trip)
+        logger.info(f"Created trip instance: {trip}")
+        
+        logger.info("Attempting to add trip to session")
+        db.add(trip)
+        logger.info("Successfully added trip to session")
+        
+        logger.info("Attempting to commit")
+        db.commit()
+        logger.info("Successfully committed")
+        
+        db.refresh(trip)
+        logger.info(f"Refreshed trip instance: {trip}")
         
         # Research destination
         research_results = await planner.research_destination(
@@ -69,25 +84,25 @@ async def create_trip(
         # Create itinerary
         itinerary = await planner.create_itinerary(trip, research_results)
         for day in itinerary:
-            session.add(day)
+            db.add(day)
         
         # Calculate budget
         budget = planner.calculate_budget(trip, itinerary)
-        session.add(budget)
+        db.add(budget)
         
-        session.commit()
-        session.refresh(trip)
+        db.commit()
+        db.refresh(trip)
         
         return trip
         
     except Exception as e:
-        session.rollback()
+        logger.error(f"Error in create_trip: {str(e)}")
+        logger.error(f"Error type: {type(e)}")
+        db.rollback()
         raise HTTPException(
             status_code=400,
             detail=f"Error creating trip: {str(e)}"
         )
-    finally:
-        session.close()
 
 @router.get(
     "/",
