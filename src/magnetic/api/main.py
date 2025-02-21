@@ -2,13 +2,13 @@
 
 from fastapi import FastAPI
 from sqlalchemy import text
-import redis.asyncio as redis
 from datetime import timedelta
 
 from magnetic.config.settings import config
-from magnetic.database import get_db
+from magnetic.database import get_db, init_db
 from magnetic.services.cache import cache
 from magnetic.utils.decorators import cached
+from .routes import trips
 
 app = FastAPI(
     title="Magnetic API",
@@ -17,10 +17,14 @@ app = FastAPI(
     debug=config.debug
 )
 
+# Include routers
+app.include_router(trips.router)
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
     await cache.connect()
+    init_db()  # Initialize database tables
 
 @app.on_event("shutdown")
 async def shutdown_event():
