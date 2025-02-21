@@ -125,37 +125,56 @@ magnetic/
 
 ## Data Architecture
 
-### 1. Storage (Planned)
-- **Local Storage**:
-  - SQLite: For development
-  - PostgreSQL: For production
+### 1. Storage Implementation
+- **Database**:
+  - PostgreSQL: Primary database for all environments
+  - Benefits:
+    - Better concurrency support for multi-agent system
+    - Native JSON support for agent state storage
+    - Robust transaction handling
+    - Docker-friendly deployment
 - **Caching**:
-  - Redis: For session data and API responses
+  - Redis: For agent state and API response caching
+  - Implementation status: Docker container ready, caching layer pending
 - **File Storage**:
   - Local filesystem (development)
   - S3-compatible storage (production)
+  - Implementation status: Pending
 
-### 2. Data Models (To Be Implemented)
+### 2. Database Schema
 ```python
-# Core data structures (example)
-class TripPlan:
-    id: str
-    user_preferences: Dict[str, Any]
-    itinerary: List[DayPlan]
-    budget: Budget
-    documents: List[Document]
+# Core data models (Implemented)
+class BaseModel(Base):
+    """Base model with common fields."""
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = Column(DateTime, onupdate=datetime.utcnow)
 
-class DayPlan:
-    date: datetime
-    activities: List[Activity]
-    accommodations: Accommodation
-    transportation: List[Transport]
+class Trip(BaseModel):
+    """Trip model with SQLAlchemy ORM."""
+    title: Mapped[str]
+    description: Mapped[Optional[str]]
+    start_date: Mapped[datetime]
+    end_date: Mapped[datetime]
+    status: Mapped[TripStatus]
+    preferences: Mapped[dict] = Column(JSON)
+    
+    # Relationships
+    itinerary_days: Mapped[List["ItineraryDay"]]
+    budget: Mapped["Budget"]
 
-class Budget:
-    total: Decimal
-    breakdown: Dict[str, Decimal]
-    currency: str
+# Additional models implemented:
+# - ItineraryDay
+# - Activity
+# - Accommodation
+# - Budget
 ```
+
+### 3. Data Access Layer
+- SQLAlchemy ORM for database operations
+- Alembic for database migrations
+- Connection pooling configured in Docker environment
+- Health checks implemented for database monitoring
 
 ## Current Configuration System
 ```python

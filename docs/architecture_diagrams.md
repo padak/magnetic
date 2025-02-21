@@ -24,15 +24,40 @@ graph TB
     end
     
     subgraph "Storage Layer"
-        Storage --> PostgreSQL[(PostgreSQL)]
-        Storage --> Redis[(Redis Cache)]
-        Storage --> FileStorage[File Storage]
+        subgraph "Primary Storage"
+            PostgreSQL[(PostgreSQL DB)]
+            style PostgreSQL fill:#f9f,stroke:#333,stroke-width:2px
+        end
+        
+        subgraph "Caching Layer"
+            Redis[(Redis Cache)]
+            style Redis fill:#bbf,stroke:#333,stroke-width:2px
+        end
+        
+        subgraph "File Storage"
+            FileSystem[Local FileSystem]
+            style FileSystem fill:#bfb,stroke:#333,stroke-width:2px
+        end
+        
+        Storage --> PostgreSQL
+        Storage --> Redis
+        Storage --> FileSystem
     end
 
     subgraph "Monitoring"
         API --> HealthChecks[Health Checks]
         HealthChecks --> ServiceStatus[Service Status]
+        ServiceStatus --> PostgreSQL
+        ServiceStatus --> Redis
     end
+
+    classDef implemented fill:#9f9,stroke:#333,stroke-width:2px;
+    classDef inProgress fill:#ff9,stroke:#333,stroke-width:2px;
+    classDef planned fill:#f99,stroke:#333,stroke-width:2px;
+    
+    class PostgreSQL implemented;
+    class Redis inProgress;
+    class FileSystem planned;
 ```
 
 ## Data Flow
