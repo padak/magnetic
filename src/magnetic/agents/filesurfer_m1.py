@@ -1,0 +1,207 @@
+"""FileSurfer agent implementation using Magentic-One framework."""
+
+import os
+import json
+from typing import Dict, List, Optional, Any, Union
+from datetime import datetime
+from pathlib import Path
+from fpdf import FPDF
+import jinja2
+import markdown
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+from jinja2 import Environment, FileSystemLoader
+
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.teams.magentic_one import MagenticOne
+from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+
+class FileSystemHandler(FileSystemEventHandler):
+    """Handler for file system events."""
+    
+    def __init__(self, callback):
+        """Initialize the handler with a callback function."""
+        self.callback = callback
+        
+    def on_modified(self, event):
+        """Handle file modification events."""
+        if not event.is_directory:
+            self.callback(event.src_path, 'modified')
+            
+    def on_created(self, event):
+        """Handle file creation events."""
+        if not event.is_directory:
+            self.callback(event.src_path, 'created')
+            
+    def on_deleted(self, event):
+        """Handle file deletion events."""
+        if not event.is_directory:
+            self.callback(event.src_path, 'deleted')
+
+class FileSurferM1:
+    """FileSurfer agent using Magentic-One framework."""
+    
+    def __init__(self, m1: MagenticOne, templates_dir: Optional[str] = None, output_dir: Optional[str] = None):
+        """Initialize the FileSurfer agent.
+        
+        Args:
+            m1: MagenticOne instance for AI capabilities
+            templates_dir: Directory containing document templates
+            output_dir: Directory for generated documents
+        """
+        self.m1 = m1
+        
+        # Set up template environment
+        if templates_dir is None:
+            templates_dir = os.path.join(os.path.dirname(__file__), '..', 'templates')
+        self.templates_dir = Path(templates_dir)
+        self.templates_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Set up output directory
+        if output_dir is None:
+            output_dir = os.path.join(os.path.dirname(__file__), '..', 'output')
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize Jinja2 environment
+        self.jinja_env = Environment(
+            loader=FileSystemLoader(str(self.templates_dir)),
+            autoescape=True
+        )
+        
+        # Initialize file system observer
+        self.observer = Observer()
+        self.handler = FileSystemHandler(self._handle_file_event)
+        self.observer.schedule(self.handler, str(self.output_dir), recursive=False)
+        self.observer.start()
+        
+    async def create_document(self, template_name: str, data: Dict, output_format: str = 'markdown') -> str:
+        """Create a document from a template.
+        
+        Args:
+            template_name: Name of the template file
+            data: Data to populate the template
+            output_format: Output format ('markdown' or 'pdf')
+            
+        Returns:
+            Path to the generated document
+        """
+        # Get template
+        template = self.jinja_env.get_template(template_name)
+        
+        # Render template
+        rendered = template.render(**data)
+        
+        # Generate output filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        base_name = template_name.replace('.md', '')
+        output_name = f"{base_name}_{timestamp}"
+        
+        if output_format == 'pdf':
+            # Convert markdown to PDF
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Helvetica", size=12)
+            
+            # Convert markdown to HTML and write to PDF
+            html = markdown.markdown(rendered)
+            pdf.write_html(html)
+            
+            # Save PDF
+            output_path = self.output_dir / f"{output_name}.pdf"
+            pdf.output(str(output_path))
+        else:
+            # Save as markdown
+            output_path = self.output_dir / f"{output_name}.md"
+            output_path.write_text(rendered)
+            
+        return str(output_path)
+        
+    async def create_itinerary(self, trip_data: Dict) -> str:
+        """Create a trip itinerary document.
+        
+        Args:
+            trip_data: Dictionary containing trip details
+            
+        Returns:
+            Path to the generated itinerary
+        """
+        # Use Magentic-One to enhance itinerary data
+        enhanced_data = await self.m1.run_stream(
+            "Enhance the trip data with additional details for the itinerary",
+            trip_data
+        )
+        
+        template_name = 'itinerary_template.md'
+        return await self.create_document(template_name, enhanced_data)
+        
+    async def create_travel_guide(self, destination: str, interests: List[str]) -> str:
+        """Create a travel guide document.
+        
+        Args:
+            destination: Name of the destination
+            interests: List of traveler interests
+            
+        Returns:
+            Path to the generated guide
+        """
+        # Use Magentic-One to generate guide content
+        guide_data = await self.m1.run_stream(
+            "Generate a comprehensive travel guide",
+            {
+                'destination': destination,
+                'interests': interests
+            }
+        )
+        
+        template_name = 'guide_template.md'
+        return await self.create_document(template_name, guide_data)
+        
+    async def create_emergency_info(self, trip_data: Dict) -> str:
+        """Create an emergency information document.
+        
+        Args:
+            trip_data: Dictionary containing trip details
+            
+        Returns:
+            Path to the generated document
+        """
+        # Use Magentic-One to gather emergency information
+        emergency_data = await self.m1.run_stream(
+            "Gather emergency information for the destination",
+            trip_data
+        )
+        
+        template_name = 'emergency_template.md'
+        return await self.create_document(template_name, emergency_data)
+        
+    def monitor_changes(self, file_path: Union[str, Path]) -> None:
+        """Monitor a file for changes.
+        
+        Args:
+            file_path: Path to the file to monitor
+        """
+        file_path = Path(file_path)
+        if not file_path.exists():
+            raise ValueError(f"File not found: {file_path}")
+            
+        # Add file to watchdog observer
+        self.observer.schedule(
+            self.handler,
+            str(file_path.parent),
+            recursive=False
+        )
+        
+    def _handle_file_event(self, file_path: str, event_type: str) -> None:
+        """Handle file system events.
+        
+        Args:
+            file_path: Path to the affected file
+            event_type: Type of event ('modified', 'created', or 'deleted')
+        """
+        print(f"File {file_path} was {event_type}")
+        
+    def __del__(self):
+        """Clean up resources."""
+        self.observer.stop()
+        self.observer.join() 
