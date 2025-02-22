@@ -1,6 +1,6 @@
 Use python virtual environment to run the code.
 
-Use pip to install the dependencies.
+Use pip to install the dependencies via requirements.txt.
 
 Use pip freeze > requirements.txt to freeze the dependencies.
 

@@ -1,7 +1,7 @@
 """WebSurfer agent implementation for web scraping and API interactions."""
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import json
 import httpx
@@ -16,19 +16,16 @@ class WebSurferAgent(BaseAgent):
     """Agent responsible for web scraping and API interactions."""
 
     def __init__(self, name: str = "WebSurfer", config: Optional[Dict[str, Any]] = None):
-        """Initialize WebSurfer agent.
-        
-        Args:
-            name: Agent name
-            config: Optional configuration override
-        """
+        """Initialize WebSurfer agent."""
         super().__init__(name, config)
         self._browser: Optional[Browser] = None
         self._http_client: Optional[httpx.AsyncClient] = None
         self._amadeus_client: Optional[Client] = None
         self.logger = get_logger(__name__)
         self.endpoints = {
-            'amadeus': 'https://test.api.amadeus.com'
+            'amadeus': 'https://test.api.amadeus.com',
+            'maps': 'https://maps.googleapis.com/maps/api',
+            'weather': 'https://api.open-meteo.com/v1'
         }
 
     async def initialize(self) -> None:
@@ -43,7 +40,11 @@ class WebSurferAgent(BaseAgent):
             'last_request_time': None,
             'requests_made': 0,
             'cache_hits': 0,
-            'errors': []
+            'errors': [],
+            'route_optimizations': 0,
+            'weather_alerts': [],
+            'tracked_flights': set(),
+            'hotel_recommendations': []
         })
         
         try:
@@ -90,18 +91,11 @@ class WebSurferAgent(BaseAgent):
         await super().cleanup()
 
     async def execute(self, task: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a web surfing task.
-        
-        Args:
-            task: Task specification containing type and parameters
-            
-        Returns:
-            Dict containing task results
-        """
+        """Execute a web surfing task."""
         await super().execute(task)
         
         task_type = task.get('type', '')
-        self.state['last_request_time'] = datetime.utcnow().isoformat()
+        self.state['last_request_time'] = datetime.now(timezone.utc).isoformat()
         self.state['requests_made'] += 1
         
         try:
@@ -113,6 +107,8 @@ class WebSurferAgent(BaseAgent):
                 return await self._handle_location_api(task)
             elif task_type == 'travel_search':
                 return await self._handle_travel_api(task)
+            elif task_type == 'route_planning':
+                return await self._handle_route_planning(task)
             else:
                 raise ValueError(f"Unknown task type: {task_type}")
                 
@@ -140,7 +136,8 @@ class WebSurferAgent(BaseAgent):
         if not url:
             raise ValueError("URL is required for web scraping")
             
-        async with self._browser.new_page() as page:
+        page = await self._browser.new_page()
+        try:
             await page.goto(url, wait_until='networkidle')
             
             results = {}
@@ -155,9 +152,11 @@ class WebSurferAgent(BaseAgent):
                     
             return {
                 'url': url,
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'data': results
             }
+        finally:
+            await page.close()
 
     async def _handle_weather_api(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Handle weather API requests using Open-Meteo.
@@ -206,7 +205,7 @@ class WebSurferAgent(BaseAgent):
         return {
             'location': location,
             'coordinates': coords,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'data': response.json()
         }
 
@@ -242,7 +241,7 @@ class WebSurferAgent(BaseAgent):
         
         return {
             'location': location,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'data': response.json()
         }
 
@@ -346,4 +345,123 @@ class WebSurferAgent(BaseAgent):
                 'error': {
                     'message': str(e)
                 }
-            } 
+            }
+
+    async def _handle_route_planning(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle route planning and optimization tasks.
+        
+        Args:
+            task: Task specification with route details
+            
+        Returns:
+            Dict containing optimized route data
+        """
+        if not self._http_client:
+            raise RuntimeError("HTTP client not initialized")
+
+        # Validate required parameters
+        origin = task.get('origin')
+        destination = task.get('destination')
+        waypoints = task.get('waypoints', [])
+        optimize = task.get('optimize', True)
+        mode = task.get('mode', 'driving')
+        departure_time = task.get('departure_time', 'now')
+        
+        if not origin or not destination:
+            raise ValueError("Origin and destination are required for route planning")
+
+        # Get Google Maps API key
+        api_key = self.config.api_keys.get('maps')
+        if not api_key:
+            raise ValueError("Maps API key not configured")
+
+        # Prepare waypoints string if any
+        waypoints_str = ''
+        if waypoints:
+            if optimize:
+                waypoints_str = f"optimize:true|{('|').join(waypoints)}"
+            else:
+                waypoints_str = f"{('|').join(waypoints)}"
+
+        # Build request parameters
+        params = {
+            'origin': origin,
+            'destination': destination,
+            'mode': mode,
+            'departure_time': departure_time,
+            'alternatives': 'true',
+            'key': api_key
+        }
+        
+        if waypoints_str:
+            params['waypoints'] = waypoints_str
+
+        # Make request to Directions API
+        url = f"{self.endpoints['maps']}/directions/json"
+        response = await self._http_client.get(url, params=params)
+        response.raise_for_status()
+        routes_data = response.json()
+
+        if routes_data.get('status') != 'OK':
+            raise ValueError(f"Route planning failed: {routes_data.get('status')}")
+
+        # Process and analyze routes
+        routes = routes_data['routes']
+        analyzed_routes = []
+        
+        for route in routes:
+            # Calculate total distance and duration
+            total_distance = sum(leg['distance']['value'] for leg in route['legs'])
+            total_duration = sum(leg['duration']['value'] for leg in route['legs'])
+            
+            # Get traffic duration if available
+            traffic_duration = None
+            if 'duration_in_traffic' in route['legs'][0]:
+                traffic_duration = sum(leg['duration_in_traffic']['value'] for leg in route['legs'])
+
+            # Extract key points along the route
+            key_points = []
+            for leg in route['legs']:
+                key_points.extend([
+                    step['start_location'] for step in leg['steps']
+                ])
+                key_points.append(leg['steps'][-1]['end_location'])
+
+            # Check for toll roads and highways
+            has_tolls = any('toll road' in warning for warning in route.get('warnings', []))
+            has_highways = any(
+                any('highway' in step.get('html_instructions', '').lower() 
+                    for step in leg['steps'])
+                for leg in route['legs']
+            )
+
+            analyzed_routes.append({
+                'overview_polyline': route['overview_polyline']['points'],
+                'bounds': route['bounds'],
+                'total_distance': total_distance,
+                'total_duration': total_duration,
+                'traffic_duration': traffic_duration,
+                'key_points': key_points,
+                'has_tolls': has_tolls,
+                'has_highways': has_highways,
+                'steps': [leg['steps'] for leg in route['legs']],
+                'warnings': route.get('warnings', [])
+            })
+
+        # Sort routes by duration (considering traffic if available)
+        analyzed_routes.sort(key=lambda x: x['traffic_duration'] if x['traffic_duration'] else x['total_duration'])
+
+        # Update agent state
+        self.state['route_optimizations'] += 1
+
+        return {
+            'status': 'success',
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'origin': origin,
+            'destination': destination,
+            'waypoints': waypoints,
+            'mode': mode,
+            'routes': analyzed_routes,
+            'optimized': optimize,
+            'total_routes_found': len(analyzed_routes)
+        } 
