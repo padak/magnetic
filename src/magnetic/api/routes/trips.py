@@ -1,7 +1,7 @@
 """Trip management API routes."""
 
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 import logging
 
@@ -16,6 +16,8 @@ from ..schemas import (
     TripUpdate,
     TripResponse,
     TripListResponse,
+    TripDocument,
+    TripMonitoring,
     ErrorResponse
 )
 
@@ -28,11 +30,13 @@ async def get_trip_planner() -> TripPlanner:
     # Initialize M1 agents
     websurfer = WebSurferM1()
     orchestrator = OrchestratorM1()
+    filesurfer = FileSurferM1(m1=orchestrator.m1)
+    
     await websurfer.initialize()
     await orchestrator.initialize()
     
     try:
-        yield TripPlanner(websurfer, orchestrator)
+        yield TripPlanner(websurfer, orchestrator, filesurfer)
     finally:
         await websurfer.cleanup()
         await orchestrator.cleanup()
@@ -69,26 +73,20 @@ async def create_trip(
         db.commit()
         db.refresh(trip)
         
-        # Create planning task for orchestrator
-        planning_task = {
-            'type': 'plan_trip',
-            'data': {
-                'destination': trip.destination,
-                'dates': {
-                    'start': trip.start_date.isoformat(),
-                    'end': trip.end_date.isoformat()
-                },
-                'preferences': trip.preferences
-            }
-        }
-        
-        # Execute planning through orchestrator
-        planning_result = await planner.orchestrator.execute(planning_task)
+        # Research destination
+        research_result = await planner.research_destination(
+            trip.destination,
+            {
+                'start': trip.start_date,
+                'end': trip.end_date
+            },
+            trip.preferences
+        )
         
         # Generate documents
-        await planner.generate_documents(trip, planning_result)
+        await planner.generate_documents(trip, research_result)
         
-        # Update trip with results
+        # Update trip status
         trip.status = TripStatus.PLANNED
         db.commit()
         db.refresh(trip)
@@ -242,4 +240,137 @@ async def delete_trip(
         raise HTTPException(
             status_code=400,
             detail=f"Error deleting trip: {str(e)}"
+        )
+
+@router.get(
+    "/{trip_id}/documents",
+    response_model=List[TripDocument],
+    responses={404: {"model": ErrorResponse}},
+    summary="Get trip documents"
+)
+async def get_trip_documents(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    planner: TripPlanner = Depends(get_trip_planner)
+) -> List[TripDocument]:
+    """Get documents associated with a trip."""
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Trip {trip_id} not found"
+        )
+    
+    try:
+        # Get documents from FileSurfer
+        documents = await planner.filesurfer.list_documents(trip_id)
+        return documents
+    except Exception as e:
+        logger.error(f"Error getting trip documents: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving documents: {str(e)}"
+        )
+
+@router.get(
+    "/{trip_id}/monitoring",
+    response_model=TripMonitoring,
+    responses={404: {"model": ErrorResponse}},
+    summary="Get trip monitoring updates"
+)
+async def get_trip_monitoring(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    planner: TripPlanner = Depends(get_trip_planner)
+) -> TripMonitoring:
+    """Get real-time monitoring updates for a trip."""
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Trip {trip_id} not found"
+        )
+    
+    try:
+        # Get monitoring updates from Orchestrator
+        task_id = f"monitor_{trip_id}"
+        task_info = planner.orchestrator.get_task_status(task_id)
+        
+        if not task_info or task_info['status'] == 'failed':
+            raise HTTPException(
+                status_code=404,
+                detail="No monitoring data available"
+            )
+        
+        return task_info.get('updates', {})
+    except Exception as e:
+        logger.error(f"Error getting monitoring updates: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving monitoring data: {str(e)}"
+        )
+
+@router.post(
+    "/{trip_id}/monitoring",
+    status_code=204,
+    responses={404: {"model": ErrorResponse}},
+    summary="Start trip monitoring"
+)
+async def start_monitoring(
+    trip_id: int,
+    monitor_types: List[str] = Query(['weather', 'travel']),
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    planner: TripPlanner = Depends(get_trip_planner)
+) -> None:
+    """Start monitoring a trip."""
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Trip {trip_id} not found"
+        )
+    
+    try:
+        # Start monitoring in background
+        background_tasks.add_task(
+            planner.monitor_trip,
+            trip,
+            monitor_types
+        )
+    except Exception as e:
+        logger.error(f"Error starting trip monitoring: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error starting monitoring: {str(e)}"
+        )
+
+@router.delete(
+    "/{trip_id}/monitoring",
+    status_code=204,
+    responses={404: {"model": ErrorResponse}},
+    summary="Stop trip monitoring"
+)
+async def stop_monitoring(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    planner: TripPlanner = Depends(get_trip_planner)
+) -> None:
+    """Stop monitoring a trip."""
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Trip {trip_id} not found"
+        )
+    
+    try:
+        # Stop monitoring task
+        task_id = f"monitor_{trip_id}"
+        await planner.orchestrator.cleanup_task(task_id)
+    except Exception as e:
+        logger.error(f"Error stopping trip monitoring: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error stopping monitoring: {str(e)}"
         ) 
