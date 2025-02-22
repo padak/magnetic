@@ -1,6 +1,6 @@
 # US Family Trip Planner
 
-A comprehensive travel planning system built with Python, FastAPI, and React, using Magnetic-One's multi-agent architecture for intelligent trip planning.
+A comprehensive travel planning system built with Python, FastAPI, and React, using Magnetic-One's multi-agent architecture for intelligent trip planning. This project leverages the [Magnetic-One framework](https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/magentic-one.html), a generalist multi-agent system developed by Microsoft Research for solving complex tasks.
 
 ## 🌟 Features
 
@@ -34,7 +34,7 @@ A comprehensive travel planning system built with Python, FastAPI, and React, us
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/magnetic.git
+git clone https://github.com/padak/magnetic.git
 cd magnetic
 ```
 
