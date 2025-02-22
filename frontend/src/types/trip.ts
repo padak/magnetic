@@ -1,76 +1,74 @@
 export interface TripPreferences {
-  adults: number;
-  children: number;
-  hotel_budget: string;
-  max_activity_price: number;
-  activity_types: string[];
-  family_friendly: boolean;
-  accessible: boolean;
-  transportation_budget: number;
-  food_budget: number;
-  misc_budget: number;
-  currency: string;
+  interests: string[];
+  budget: string;
+  accommodation_type?: string;
+  travel_style?: string;
+  accessibility_needs?: string[];
+  dietary_restrictions?: string[];
 }
 
-export interface Activity {
-  name: string;
-  description?: string;
-  start_time: string;
-  end_time: string;
-  location?: string;
-  cost: number;
-  booking_info: Record<string, any>;
+export interface TripDates {
+  start: string;
+  end: string;
 }
 
-export interface Accommodation {
-  name: string;
-  address: string;
-  check_in: string;
-  check_out: string;
-  cost: number;
-  booking_info: Record<string, any>;
+export interface TripDocument {
+  path: string;
+  type: "itinerary" | "guide" | "emergency" | "checklist";
+  last_updated: string;
 }
 
-export interface ItineraryDay {
-  date: string;
-  notes?: string;
-  activities: Activity[];
-  accommodation?: Accommodation;
+export interface WeatherUpdate {
+  temperature: number;
+  conditions: string;
+  timestamp: string;
 }
 
-export interface Budget {
-  total: number;
-  spent: number;
-  currency: string;
-  breakdown: Record<string, number>;
+export interface TravelAlert {
+  type: string;
+  message: string;
+  severity: "info" | "warning" | "critical";
+  timestamp: string;
+}
+
+export interface TripMonitoring {
+  weather_updates: WeatherUpdate[];
+  travel_alerts?: TravelAlert[];
 }
 
 export interface Trip {
   id: number;
   title: string;
-  description?: string;
+  description: string;
   destination: string;
   start_date: string;
   end_date: string;
-  status: string;
-  preferences: TripPreferences;
-  itinerary_days: ItineraryDay[];
-  budget?: Budget;
+  status: "planning" | "planned" | "in_progress" | "completed";
+  preferences: {
+    budget: string;
+    interests: string[];
+    accommodation_type?: string;
+    travel_style?: string;
+  };
+  documents?: TripDocument[];
+  monitoring?: TripMonitoring;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TripCreate {
   title: string;
-  description?: string;
+  description: string;
   destination: string;
   start_date: string;
   end_date: string;
-  preferences?: TripPreferences;
+  preferences: TripPreferences;
 }
 
 export interface TripUpdate {
   title?: string;
   description?: string;
-  preferences?: TripPreferences;
+  preferences?: Partial<TripPreferences>;
 }
 
 export interface TripListResponse {

@@ -8,7 +8,9 @@ import logging
 from ...database import get_db
 from ...models.trip import Trip, TripStatus
 from ...services.trip_planner import TripPlanner
-from ...agents.websurfer import WebSurferAgent
+from ...agents.websurfer_m1 import WebSurferM1
+from ...agents.filesurfer_m1 import FileSurferM1
+from ...agents.orchestrator_m1 import OrchestratorM1
 from ..schemas import (
     TripCreate,
     TripUpdate,
@@ -22,13 +24,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/trips", tags=["trips"])
 
 async def get_trip_planner() -> TripPlanner:
-    """Get TripPlanner instance."""
-    websurfer = WebSurferAgent()
+    """Get TripPlanner instance with M1 agents."""
+    # Initialize M1 agents
+    websurfer = WebSurferM1()
+    orchestrator = OrchestratorM1()
     await websurfer.initialize()
+    await orchestrator.initialize()
+    
     try:
-        yield TripPlanner(websurfer)
+        yield TripPlanner(websurfer, orchestrator)
     finally:
         await websurfer.cleanup()
+        await orchestrator.cleanup()
 
 @router.post(
     "/",
@@ -41,11 +48,9 @@ async def create_trip(
     db: Session = Depends(get_db),
     planner: TripPlanner = Depends(get_trip_planner)
 ) -> TripResponse:
-    """Create a new trip with initial planning."""
-    logger.info("Entering create_trip endpoint")
+    """Create a new trip with initial planning using M1 agents."""
+    logger.info("Creating new trip with M1 agents")
     logger.info(f"Received trip data: {trip_data}")
-    logger.info(f"Database session object: {db}")
-    logger.info(f"Session type: {type(db)}")
     
     try:
         # Create trip instance
@@ -60,36 +65,31 @@ async def create_trip(
         )
         logger.info(f"Created trip instance: {trip}")
         
-        logger.info("Attempting to add trip to session")
         db.add(trip)
-        logger.info("Successfully added trip to session")
-        
-        logger.info("Attempting to commit")
         db.commit()
-        logger.info("Successfully committed")
-        
         db.refresh(trip)
-        logger.info(f"Refreshed trip instance: {trip}")
         
-        # Research destination
-        research_results = await planner.research_destination(
-            trip_data.destination,
-            {
-                'start': trip_data.start_date,
-                'end': trip_data.end_date
-            },
-            trip_data.preferences.dict()
-        )
+        # Create planning task for orchestrator
+        planning_task = {
+            'type': 'plan_trip',
+            'data': {
+                'destination': trip.destination,
+                'dates': {
+                    'start': trip.start_date.isoformat(),
+                    'end': trip.end_date.isoformat()
+                },
+                'preferences': trip.preferences
+            }
+        }
         
-        # Create itinerary
-        itinerary = await planner.create_itinerary(trip, research_results)
-        for day in itinerary:
-            db.add(day)
+        # Execute planning through orchestrator
+        planning_result = await planner.orchestrator.execute(planning_task)
         
-        # Calculate budget
-        budget = planner.calculate_budget(trip, itinerary)
-        db.add(budget)
+        # Generate documents
+        await planner.generate_documents(trip, planning_result)
         
+        # Update trip with results
+        trip.status = TripStatus.PLANNED
         db.commit()
         db.refresh(trip)
         
@@ -97,7 +97,6 @@ async def create_trip(
         
     except Exception as e:
         logger.error(f"Error in create_trip: {str(e)}")
-        logger.error(f"Error type: {type(e)}")
         db.rollback()
         raise HTTPException(
             status_code=400,

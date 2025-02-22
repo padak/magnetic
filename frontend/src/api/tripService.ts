@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { Trip, TripCreate, TripUpdate, TripListResponse } from '../types/trip';
+import { Trip, TripCreate, TripUpdate, TripListResponse, TripDocument, TripMonitoring } from '../types/trip';
 
 export const tripService = {
   createTrip: async (data: TripCreate): Promise<Trip> => {
@@ -30,4 +30,23 @@ export const tripService = {
   deleteTrip: async (id: number): Promise<void> => {
     await apiClient.delete(`/api/trips/${id}`);
   },
+
+  // New methods for M1 features
+  getTripDocuments: async (id: number): Promise<TripDocument[]> => {
+    const response = await apiClient.get<TripDocument[]>(`/api/trips/${id}/documents`);
+    return response.data;
+  },
+
+  getMonitoringUpdates: async (id: number): Promise<TripMonitoring> => {
+    const response = await apiClient.get<TripMonitoring>(`/api/trips/${id}/monitoring`);
+    return response.data;
+  },
+
+  startMonitoring: async (id: number, types: string[]): Promise<void> => {
+    await apiClient.post(`/api/trips/${id}/monitoring`, { types });
+  },
+
+  stopMonitoring: async (id: number): Promise<void> => {
+    await apiClient.delete(`/api/trips/${id}/monitoring`);
+  }
 }; 
