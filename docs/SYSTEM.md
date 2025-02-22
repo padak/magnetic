@@ -129,4 +129,84 @@ Manages and coordinates other agents:
 - API documentation (OpenAPI)
 - Component documentation
 - Testing documentation
-- Deployment guides 
+- Deployment guides
+
+## Implementation Details
+
+### WebSurfer Agent (Magentic-One)
+
+The WebSurfer agent has been enhanced with Magentic-One integration, providing:
+
+1. **Task Structure**
+   ```python
+   {
+       'type': 'task_type',  # e.g., 'weather', 'location_search'
+       'required_info': ['field1', 'field2'],  # Required information
+       'params': {...}  # Task-specific parameters
+   }
+   ```
+
+2. **Core Capabilities**
+   - Web scraping with CSS selectors
+   - Weather information retrieval
+   - Location search and details
+   - Travel search and booking
+   - Route planning with preferences
+   - Destination research
+
+3. **Integration Features**
+   - OpenAI GPT-4 for natural language understanding
+   - Playwright for reliable web automation
+   - Structured responses for consistent data format
+   - Error handling and recovery mechanisms
+
+4. **Example Usage**
+   ```python
+   # Initialize WebSurfer
+   websurfer = WebSurferM1()
+   await websurfer.initialize()
+
+   # Get weather information
+   weather = await websurfer.get_weather("San Francisco")
+
+   # Research a destination
+   info = await websurfer.research_destination(
+       destination="Boston",
+       dates={"arrival": "2024-04-01", "departure": "2024-04-05"},
+       preferences={"budget": "medium", "interests": ["history", "food"]}
+   )
+   ```
+
+## Future Enhancements
+
+1. **Planned Migrations**
+   - FileSurfer Agent to Magentic-One
+   - Integration testing framework
+   - Performance monitoring
+
+2. **New Features**
+   - Enhanced error recovery
+   - Parallel task execution
+   - Caching and rate limiting
+   - More specialized agents
+
+## Dependencies
+
+- autogen-ext[magentic-one,openai]>=0.2.0
+- playwright for web automation
+- pytest for testing
+- Other core Python packages
+
+## Configuration
+
+The system uses environment variables for configuration:
+- OPENAI_API_KEY: OpenAI API key
+- Other API keys as needed
+
+## Testing
+
+Comprehensive test suite includes:
+- Unit tests for each agent
+- Integration tests for agent collaboration
+- Mocked external services
+- Async test support 
