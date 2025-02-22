@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Box,
@@ -27,15 +27,17 @@ const TripList = () => {
     queryFn: () => tripService.listTrips(page, 10, status),
   });
 
-  if (error) {
-    toast({
-      title: 'Error loading trips',
-      description: error instanceof Error ? error.message : 'An error occurred',
-      status: 'error',
-      duration: 5000,
-      isClosable: true,
-    });
-  }
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: 'Error loading trips',
+        description: error instanceof Error ? error.message : 'An error occurred',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  }, [error, toast]);
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {

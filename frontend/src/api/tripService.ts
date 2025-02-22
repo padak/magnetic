@@ -3,7 +3,7 @@ import { Trip, TripCreate, TripUpdate, TripListResponse } from '../types/trip';
 
 export const tripService = {
   createTrip: async (data: TripCreate): Promise<Trip> => {
-    const response = await apiClient.post<Trip>('/trips/', data);
+    const response = await apiClient.post<Trip>('/api/trips/', data);
     return response.data;
   },
 
@@ -13,21 +13,21 @@ export const tripService = {
       page_size: pageSize.toString(),
       ...(status && { status }),
     });
-    const response = await apiClient.get<TripListResponse>(`/trips/?${params}`);
+    const response = await apiClient.get<TripListResponse>(`/api/trips/?${params}`);
     return response.data;
   },
 
   getTrip: async (id: number): Promise<Trip> => {
-    const response = await apiClient.get<Trip>(`/trips/${id}`);
+    const response = await apiClient.get<Trip>(`/api/trips/${id}`);
     return response.data;
   },
 
   updateTrip: async (id: number, data: TripUpdate): Promise<Trip> => {
-    const response = await apiClient.patch<Trip>(`/trips/${id}`, data);
+    const response = await apiClient.patch<Trip>(`/api/trips/${id}`, data);
     return response.data;
   },
 
   deleteTrip: async (id: number): Promise<void> => {
-    await apiClient.delete(`/trips/${id}`);
+    await apiClient.delete(`/api/trips/${id}`);
   },
 }; 

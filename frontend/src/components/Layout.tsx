@@ -1,11 +1,7 @@
 import { Box, Container, Flex, Heading, Link as ChakraLink } from '@chakra-ui/react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, Outlet } from 'react-router-dom';
 
-interface LayoutProps {
-  children: React.ReactNode;
-}
-
-const Layout = ({ children }: LayoutProps) => {
+const Layout = () => {
   return (
     <Box minH="100vh" bg="gray.50">
       <Box bg="blue.600" color="white" py={4} mb={8}>
@@ -26,7 +22,7 @@ const Layout = ({ children }: LayoutProps) => {
         </Container>
       </Box>
       <Container maxW="container.xl" pb={8}>
-        {children}
+        <Outlet />
       </Container>
     </Box>
   );

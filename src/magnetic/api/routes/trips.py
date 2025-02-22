@@ -19,7 +19,7 @@ from ..schemas import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/trips", tags=["trips"])
+router = APIRouter(prefix="/api/trips", tags=["trips"])
 
 async def get_trip_planner() -> TripPlanner:
     """Get TripPlanner instance."""
