@@ -146,16 +146,41 @@ class FileSurferM1:
             Path to the generated guide
         """
         # Use Magentic-One to generate guide content
-        guide_data = await self.m1.run_stream(
-            "Generate a comprehensive travel guide",
-            {
-                'destination': destination,
-                'interests': interests
-            }
-        )
+        self.m1.messages = [{"role": "user", "content": json.dumps({
+            'task': "Generate a comprehensive travel guide",
+            'destination': destination,
+            'interests': interests
+        })}]
         
-        template_name = 'guide_template.md'
-        return await self.create_document(template_name, guide_data)
+        try:
+            guide_data = ""
+            async for chunk in self.m1.run_stream():
+                guide_data += chunk
+            
+            # Parse the response and format it for the template
+            response = json.loads(guide_data)
+            template_data = {
+                'destination': destination,
+                'overview': response.get('message', 'No overview available'),
+                'attractions': response.get('attractions', []),
+                'local_tips': response.get('local_tips', []),
+                'cultural_info': response.get('cultural_info', []),
+                'transportation': response.get('transportation', {}),
+                'weather': response.get('weather', {}),
+                'safety_info': response.get('safety_info', ''),
+                'shopping': response.get('shopping', {}),
+                'resources': response.get('resources', []),
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            template_name = 'guide_template.md'
+            return await self.create_document(template_name, template_data)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse guide data: {e}")
+            raise Exception("Failed to generate travel guide: Invalid response format")
+        except Exception as e:
+            logger.error(f"Error generating travel guide: {e}")
+            raise
         
     async def create_emergency_info(self, trip_data: Dict) -> str:
         """Create an emergency information document.
@@ -167,13 +192,39 @@ class FileSurferM1:
             Path to the generated document
         """
         # Use Magentic-One to gather emergency information
-        emergency_data = await self.m1.run_stream(
-            "Gather emergency information for the destination",
-            trip_data
-        )
+        self.m1.messages = [{"role": "user", "content": json.dumps({
+            'task': "Gather emergency information for the destination",
+            'trip_data': trip_data
+        })}]
         
-        template_name = 'emergency_template.md'
-        return await self.create_document(template_name, emergency_data)
+        try:
+            emergency_data = ""
+            async for chunk in self.m1.run_stream():
+                emergency_data += chunk
+                
+            # Parse the response and format it for the template
+            response = json.loads(emergency_data)
+            template_data = {
+                'destination': trip_data['destination'],
+                'emergency_contacts': response.get('emergency_contacts', {}),
+                'medical_facilities': response.get('medical_facilities', []),
+                'embassy_info': response.get('embassy_info', {}),
+                'local_info': response.get('local_info', {}),
+                'emergency_phrases': response.get('emergency_phrases', []),
+                'insurance': response.get('insurance', {}),
+                'disaster_procedures': response.get('disaster_procedures', ''),
+                'emergency_apps': response.get('emergency_apps', []),
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            template_name = 'emergency_template.md'
+            return await self.create_document(template_name, template_data)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse emergency info: {e}")
+            raise Exception("Failed to generate emergency info: Invalid response format")
+        except Exception as e:
+            logger.error(f"Error generating emergency info: {e}")
+            raise
         
     def monitor_changes(self, file_path: Union[str, Path]) -> None:
         """Monitor a file for changes.

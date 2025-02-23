@@ -5,6 +5,7 @@ pyautogen>=0.2.0
 autogen-core>=0.2.0
 autogen>=0.2.0  # Added for code executors
 python-dotenv>=1.0.0
+tenacity>=8.2.3  # Added for retry logic
 
 # Web automation
 playwright>=1.40

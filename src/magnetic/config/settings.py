@@ -63,7 +63,7 @@ class Config:
         }
         
         model_settings = {
-            "model_name": os.getenv("MODEL_NAME", "gpt-4o"),
+            "model_name": os.getenv("MODEL_NAME", "gpt-3.5-turbo-0125"),
             "max_tokens": int(os.getenv("MAX_TOKENS", "4000")),
             "temperature": float(os.getenv("TEMPERATURE", "0.7")),
         }

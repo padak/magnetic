@@ -49,10 +49,7 @@ class TripPlanner:
         """
         return await self.websurfer.research_destination(
             destination=destination,
-            dates={
-                'start': dates['start'].isoformat(),
-                'end': dates['end'].isoformat()
-            },
+            dates=dates,
             preferences=preferences
         )
         

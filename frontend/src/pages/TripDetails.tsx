@@ -19,35 +19,50 @@ import {
   AlertIcon,
 } from "@chakra-ui/react";
 import { useParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect } from 'react';
 import { tripService } from "../api/tripService";
-import { Trip, TripDocument, TripMonitoring } from "../types/trip";
+import type { Trip } from "../types/trip";
 
 export default function TripDetails() {
   const { id } = useParams<{ id: string }>();
   const toast = useToast();
-  const queryClient = useQueryClient();
 
   // Fetch trip details
-  const { data: trip, isLoading: tripLoading } = useQuery<Trip>({
+  const { data: trip, isLoading: tripLoading, error: tripError } = useQuery<Trip, Error>({
     queryKey: ["trip", id],
     queryFn: () => tripService.getTrip(Number(id)),
+    retry: 1,
   });
 
+  // Show error toast on trip load failure
+  useEffect(() => {
+    if (tripError) {
+      toast({
+        title: "Error loading trip",
+        description: tripError.message,
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  }, [tripError, toast]);
+
   // Fetch trip documents
-  const { data: documents, isLoading: docsLoading } = useQuery<TripDocument[]>({
+  const { data: documents, isLoading: docsLoading } = useQuery<Trip['documents']>({
     queryKey: ["trip-documents", id],
     queryFn: () => tripService.getTripDocuments(Number(id)),
     enabled: !!trip,
+    retry: 1,
   });
 
   // Fetch monitoring updates
-  const { data: monitoring, isLoading: monitoringLoading } = useQuery<TripMonitoring>({
+  const { data: monitoring, isLoading: monitoringLoading } = useQuery<Trip['monitoring']>({
     queryKey: ["trip-monitoring", id],
     queryFn: () => tripService.getMonitoringUpdates(Number(id)),
     enabled: !!trip && trip.status === "in_progress",
     refetchInterval: 30000, // Refresh every 30 seconds
+    retry: 1,
   });
 
   // Start monitoring when trip starts
@@ -134,7 +149,9 @@ export default function TripDetails() {
                   <Text fontSize="lg" fontWeight="bold">Preferences</Text>
                   <VStack align="stretch" spacing={2}>
                     <Text>Budget: {trip.preferences.budget}</Text>
-                    <Text>Interests: {trip.preferences.interests.join(", ")}</Text>
+                    {trip.preferences.interests && trip.preferences.interests.length > 0 && (
+                      <Text>Interests: {trip.preferences.interests.join(", ")}</Text>
+                    )}
                     {trip.preferences.accommodation_type && (
                       <Text>Accommodation: {trip.preferences.accommodation_type}</Text>
                     )}

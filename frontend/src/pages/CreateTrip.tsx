@@ -1,4 +1,3 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -16,30 +15,12 @@ import {
 } from '@chakra-ui/react';
 import { useForm } from 'react-hook-form';
 import { tripService } from '../api/tripService';
+import { TripCreate } from '../types/trip';
 
-type FormData = {
-  title: string;
-  description: string;
-  destination: string;
-  start_date: string;
-  end_date: string;
-  preferences: {
-    adults: number;
-    children: number;
-    hotel_budget: string;
-    max_activity_price: number;
-    activity_types: string[];
-    family_friendly: boolean;
-    accessible: boolean;
-    transportation_budget: number;
-    food_budget: number;
-    misc_budget: number;
-    currency: string;
-  };
-};
+type FormData = TripCreate;
 
 const CreateTrip = () => {
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>();
+  const { register, handleSubmit } = useForm<FormData>();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -48,8 +29,19 @@ const CreateTrip = () => {
       const response = await tripService.createTrip({
         ...data,
         preferences: {
-          ...data.preferences,
+          interests: ['History', 'Culture'],
+          budget: 'MODERATE',
           activity_types: ['SIGHTSEEING', 'FAMILY_FUN', 'HISTORY', 'CULTURE'],
+          adults: data.preferences.adults,
+          children: data.preferences.children,
+          hotel_budget: data.preferences.hotel_budget,
+          max_activity_price: data.preferences.max_activity_price,
+          family_friendly: data.preferences.family_friendly,
+          accessible: data.preferences.accessible,
+          transportation_budget: data.preferences.transportation_budget,
+          food_budget: data.preferences.food_budget,
+          misc_budget: data.preferences.misc_budget,
+          currency: data.preferences.currency
         },
       });
       

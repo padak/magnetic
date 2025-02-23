@@ -5,10 +5,14 @@ import asyncio
 import os
 from datetime import datetime, UTC
 from dataclasses import dataclass, field
+import logging
+import json
 
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from autogen_ext.teams.magentic_one import MagenticOne
 from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class TaskMetrics:
@@ -30,7 +34,7 @@ class OrchestratorM1:
         """
         self.config = config or {}
         self.client = OpenAIChatCompletionClient(
-            model=self.config.get('model', 'gpt-4-turbo-preview'),
+            model=self.config.get('model', 'gpt-3.5-turbo-0125'),
             api_key=os.getenv("OPENAI_API_KEY")
         )
         self.code_executor = LocalCommandLineCodeExecutor()
@@ -105,77 +109,88 @@ class OrchestratorM1:
             raise
 
     async def _execute_task(self, task_id: str, task: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a single task with retries and error handling."""
+        """Execute a single task with retry logic."""
         start_time = datetime.now(UTC)
-        max_retries = task.get("max_retries", 3)
-        retry_count = 0
+        retries = 0
+        max_retries = task.get('max_retries', self.config.get('max_retries', 3))
         
-        self.tasks[task_id]["status"] = "in_progress"
-        self.tasks[task_id]["started_at"] = start_time.isoformat()
+        # Update task status
+        self.tasks[task_id] = {
+            "id": task_id,
+            "type": task.get('type', 'unknown'),
+            "status": "in_progress",
+            "started_at": start_time.isoformat(),
+            "metrics": TaskMetrics(),
+            "error_history": []
+        }
         
-        while retry_count <= max_retries:
+        while retries <= max_retries:
             try:
-                # Convert task to Magentic-One format
+                # Format task for M1
                 m1_task = {
-                    "task_type": task["type"],
-                    "instructions": task.get("data", {}).get("instructions", ""),
-                    "parameters": task.get("data", {}),
-                    "context": {
-                        "task_id": task_id,
-                        "retry_count": retry_count
-                    }
+                    'role': 'user',
+                    'content': f"Execute task: {json.dumps(task)}"
                 }
                 
-                # Execute task
-                result = await self.m1.run_stream(m1_task)
-                
-                # Update metrics
-                end_time = datetime.now(UTC)
-                execution_time = (end_time - start_time).total_seconds()
-                
-                self.tasks[task_id].update({
-                    "status": "completed",
-                    "completed_at": end_time.isoformat(),
-                    "result": result,
-                    "metrics": TaskMetrics(
-                        execution_time=execution_time,
-                        retries=retry_count
-                    )
-                })
-                
-                # Update performance metrics
-                metrics = self.state["performance_metrics"]
-                metrics["tasks_completed"] += 1
-                metrics["average_execution_time"] = (
-                    (metrics["average_execution_time"] * (metrics["tasks_completed"] - 1) + execution_time)
-                    / metrics["tasks_completed"]
-                )
-                metrics["success_rate"] = (
-                    metrics["tasks_completed"] /
-                    (metrics["tasks_completed"] + metrics["tasks_failed"])
-                )
-                
-                return result
-                
-            except Exception as e:
-                retry_count += 1
-                if retry_count > max_retries:
-                    # Don't update failure metrics here, let execute() handle it
-                    self.tasks[task_id]["status"] = "failed"
-                    self.tasks[task_id]["error"] = str(e)
+                # Execute task using Magentic-One
+                response = []
+                try:
+                    async for chunk in self.m1.run_stream(messages=[m1_task]):
+                        if isinstance(chunk, str):
+                            response.append(chunk)
+                        elif isinstance(chunk, dict):
+                            response.append(json.dumps(chunk))
+                except Exception as stream_error:
+                    logger.error(f"Stream error for task {task_id}: {stream_error}")
                     raise
                 
-                # Add error to history
-                error_history = self.tasks[task_id].get("error_history", [])
-                error_history.append({
-                    "timestamp": datetime.now(UTC).isoformat(),
+                result = ''.join(response)
+                try:
+                    parsed_result = json.loads(result)
+                except json.JSONDecodeError:
+                    logger.warning(f"Invalid JSON response for task {task_id}")
+                    parsed_result = {'error': 'Invalid JSON response', 'raw_response': result}
+                
+                # Update task metrics
+                end_time = datetime.now(UTC)
+                execution_time = (end_time - start_time).total_seconds()
+                self.tasks[task_id]["metrics"].execution_time = execution_time
+                self.tasks[task_id]["metrics"].retries = retries
+                self.tasks[task_id]["status"] = "completed"
+                self.tasks[task_id]["completed_at"] = end_time.isoformat()
+                
+                # Update global metrics
+                self.state["performance_metrics"]["tasks_completed"] += 1
+                self.state["performance_metrics"]["average_execution_time"] = (
+                    (self.state["performance_metrics"]["average_execution_time"] * 
+                     (self.state["performance_metrics"]["tasks_completed"] - 1) +
+                     execution_time) / self.state["performance_metrics"]["tasks_completed"]
+                )
+                
+                return parsed_result
+                
+            except Exception as e:
+                error_info = {
                     "error": str(e),
-                    "retry_count": retry_count
-                })
-                self.tasks[task_id]["error_history"] = error_history
+                    "error_type": type(e).__name__,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "retry_count": retries,
+                    "task_data": task
+                }
+                logger.error(f"Task {task_id} failed (attempt {retries + 1}/{max_retries + 1}): {str(e)}")
+                self.tasks[task_id]["error_history"].append(error_info)
+                
+                retries += 1
+                if retries > max_retries:
+                    self.tasks[task_id]["status"] = "failed"
+                    self.tasks[task_id]["error"] = str(e)
+                    self.state["performance_metrics"]["tasks_failed"] += 1
+                    raise
                 
                 # Exponential backoff
-                await asyncio.sleep(2 ** retry_count)
+                backoff_time = 2 ** retries
+                logger.info(f"Retrying task {task_id} in {backoff_time} seconds...")
+                await asyncio.sleep(backoff_time)
                 
     async def execute_parallel(self, tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Execute multiple tasks in parallel with concurrency control.

@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
-from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, JSON, Enum
+from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, JSON, Enum, Boolean
 from sqlalchemy.orm import relationship, Mapped
 import enum
 
@@ -15,6 +15,7 @@ class TripStatus(enum.Enum):
     PLANNING = "planning"
     PLANNED = "planned"
     CONFIRMED = "confirmed"
+    IN_PROGRESS = "in_progress"  # New status for M1 real-time monitoring
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
@@ -31,9 +32,57 @@ class Trip(BaseModel):
     status: Mapped[TripStatus] = Column(Enum(TripStatus), default=TripStatus.DRAFT, nullable=False)
     preferences: Mapped[dict] = Column(JSON, default=dict)
     
+    # M1-specific fields
+    m1_context: Mapped[dict] = Column(JSON, default=dict, comment="Stores M1-specific context and state")
+    m1_monitoring: Mapped[dict] = Column(JSON, default=dict, comment="Real-time monitoring configuration")
+    m1_enabled: Mapped[bool] = Column(Boolean, default=True, comment="Whether M1 features are enabled")
+    last_monitored: Mapped[Optional[datetime]] = Column(DateTime, comment="Last monitoring timestamp")
+    monitoring_interval: Mapped[Optional[int]] = Column(Numeric(10, 0), comment="Monitoring interval in seconds")
+    
     # Relationships
     itinerary_days: Mapped[List["ItineraryDay"]] = relationship("ItineraryDay", back_populates="trip", cascade="all, delete-orphan")
     budget: Mapped["Budget"] = relationship("Budget", back_populates="trip", uselist=False, cascade="all, delete-orphan")
+    
+    def enable_m1(self) -> None:
+        """Enable M1 features for this trip."""
+        self.m1_enabled = True
+        
+    def disable_m1(self) -> None:
+        """Disable M1 features for this trip."""
+        self.m1_enabled = False
+        
+    def update_m1_context(self, context: dict) -> None:
+        """Update M1-specific context.
+        
+        Args:
+            context: New context dictionary to merge with existing
+        """
+        self.m1_context.update(context)
+        
+    def configure_monitoring(self, interval: int, features: List[str]) -> None:
+        """Configure real-time monitoring.
+        
+        Args:
+            interval: Monitoring interval in seconds
+            features: List of features to monitor
+        """
+        self.monitoring_interval = interval
+        self.m1_monitoring = {
+            'enabled': True,
+            'features': features,
+            'last_status': None,
+            'alerts': []
+        }
+        
+    def add_monitoring_alert(self, alert: dict) -> None:
+        """Add a monitoring alert.
+        
+        Args:
+            alert: Alert dictionary with type, message, and timestamp
+        """
+        if 'alerts' not in self.m1_monitoring:
+            self.m1_monitoring['alerts'] = []
+        self.m1_monitoring['alerts'].append(alert)
 
 class ItineraryDay(BaseModel):
     """Model representing a single day in a trip itinerary."""

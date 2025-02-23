@@ -25,8 +25,9 @@ WORKDIR /app
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies with pip
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir tenacity>=8.2.3
 
 # Copy project files
 COPY . .

@@ -1,9 +1,10 @@
 """Trip management API routes."""
 
-from typing import Optional, List
+from typing import Optional, List, AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 import logging
+from contextlib import asynccontextmanager
 
 from ...database import get_db
 from ...models.trip import Trip, TripStatus
@@ -35,11 +36,8 @@ async def get_trip_planner() -> TripPlanner:
     await websurfer.initialize()
     await orchestrator.initialize()
     
-    try:
-        yield TripPlanner(websurfer, orchestrator, filesurfer)
-    finally:
-        await websurfer.cleanup()
-        await orchestrator.cleanup()
+    planner = TripPlanner(websurfer, orchestrator, filesurfer)
+    return planner
 
 @router.post(
     "/",
@@ -77,8 +75,8 @@ async def create_trip(
         research_result = await planner.research_destination(
             trip.destination,
             {
-                'start': trip.start_date,
-                'end': trip.end_date
+                'start_date': trip.start_date,
+                'end_date': trip.end_date
             },
             trip.preferences
         )
@@ -91,11 +89,23 @@ async def create_trip(
         db.commit()
         db.refresh(trip)
         
+        # Clean up resources
+        await planner.websurfer.cleanup()
+        await planner.orchestrator.cleanup()
+        
         return trip
         
     except Exception as e:
         logger.error(f"Error in create_trip: {str(e)}")
         db.rollback()
+        
+        # Clean up resources on error
+        try:
+            await planner.websurfer.cleanup()
+            await planner.orchestrator.cleanup()
+        except Exception as cleanup_error:
+            logger.error(f"Error during cleanup: {cleanup_error}")
+        
         raise HTTPException(
             status_code=400,
             detail=f"Error creating trip: {str(e)}"
@@ -182,8 +192,8 @@ async def update_trip(
             research_results = await planner.research_destination(
                 trip.destination,
                 {
-                    'start': trip.start_date,
-                    'end': trip.end_date
+                    'start_date': trip.start_date,
+                    'end_date': trip.end_date
                 },
                 trip.preferences
             )

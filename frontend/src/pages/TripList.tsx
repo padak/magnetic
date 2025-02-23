@@ -16,7 +16,6 @@ import {
   Icon,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
 import { tripService } from '../api/tripService';
 import { Trip } from '../types/trip';
 import { FaMapMarkerAlt, FaCalendarAlt, FaMoneyBillWave } from 'react-icons/fa';

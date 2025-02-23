@@ -110,4 +110,30 @@ class TripUpdate(BaseModel):
 class ErrorResponse(BaseModel):
     """Error response model."""
     detail: str
-    code: Optional[str] 
+    code: Optional[str]
+
+class TripDocument(BaseModel):
+    """Trip document model."""
+    id: int
+    trip_id: int
+    title: str
+    content: str
+    document_type: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        """Pydantic config."""
+        from_attributes = True
+
+class TripMonitoring(BaseModel):
+    """Trip monitoring model."""
+    trip_id: int
+    status: str
+    alerts: List[str] = Field(default_factory=list)
+    last_checked: datetime
+    next_check: datetime
+
+    class Config:
+        """Pydantic config."""
+        from_attributes = True 
