@@ -10,11 +10,17 @@ import {
   useToast,
   Select,
   Badge,
+  VStack,
+  HStack,
+  Link,
+  Icon,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { tripService } from '../api/tripService';
 import { Trip } from '../types/trip';
+import { FaMapMarkerAlt, FaCalendarAlt, FaMoneyBillWave } from 'react-icons/fa';
+import { Link as RouterLink } from 'react-router-dom';
 
 const TripList = () => {
   const [page, setPage] = useState(1);
@@ -53,32 +59,42 @@ const TripList = () => {
   };
 
   const TripCard = ({ trip }: { trip: Trip }) => (
-    <Box
-      p={5}
-      shadow="md"
-      borderWidth="1px"
-      borderRadius="lg"
-      bg="white"
-      cursor="pointer"
-      onClick={() => navigate(`/trips/${trip.id}`)}
-      _hover={{ shadow: 'lg' }}
-    >
-      <Flex justify="space-between" align="center" mb={2}>
-        <Heading size="md">{trip.title}</Heading>
-        <Badge colorScheme={getStatusColor(trip.status)}>{trip.status}</Badge>
-      </Flex>
-      <Text color="gray.600" mb={2}>
-        {trip.destination}
-      </Text>
-      <Text fontSize="sm" color="gray.500">
-        {format(new Date(trip.start_date), 'MMM d, yyyy')} -{' '}
-        {format(new Date(trip.end_date), 'MMM d, yyyy')}
-      </Text>
-      {trip.budget && (
-        <Text fontSize="sm" color="gray.500" mt={2}>
-          Budget: {trip.budget.currency} {trip.budget.total.toLocaleString()}
-        </Text>
-      )}
+    <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg">
+      <VStack align="stretch" spacing={3}>
+        <HStack justify="space-between">
+          <Heading size="md">{trip.title}</Heading>
+          <Badge colorScheme={getStatusColor(trip.status)}>
+            {trip.status}
+          </Badge>
+        </HStack>
+        
+        <Text color="gray.600">{trip.description}</Text>
+        
+        <HStack>
+          <Icon as={FaMapMarkerAlt} color="blue.500" />
+          <Text>{trip.destination}</Text>
+        </HStack>
+        
+        <HStack>
+          <Icon as={FaCalendarAlt} color="green.500" />
+          <Text>
+            {new Date(trip.start_date).toLocaleDateString()} - {new Date(trip.end_date).toLocaleDateString()}
+          </Text>
+        </HStack>
+        
+        {trip.budget?.total && trip.budget?.currency && (
+          <HStack>
+            <Icon as={FaMoneyBillWave} color="purple.500" />
+            <Text>
+              Budget: {trip.budget.currency} {trip.budget.total.toLocaleString()}
+            </Text>
+          </HStack>
+        )}
+        
+        <Link as={RouterLink} to={`/trips/${trip.id}`}>
+          <Button size="sm" colorScheme="blue">View Details</Button>
+        </Link>
+      </VStack>
     </Box>
   );
 
