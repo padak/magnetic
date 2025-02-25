@@ -9,8 +9,13 @@ import logging
 import json
 
 from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.models.anthropic import AnthropicCompletionClient
+from autogen_ext.models.azure import AzureChatCompletionClient
 from autogen_ext.teams.magentic_one import MagenticOne
 from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+
+# Import LLM configuration
+from ..config.llm_config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +28,53 @@ class TaskMetrics:
     memory_usage: float = 0.0
     io_operations: int = 0
 
+class LLMClientFactory:
+    """Factory for creating LLM clients based on provider."""
+    
+    @staticmethod
+    def create_client(provider: Optional[str] = None, config: Optional[Dict[str, Any]] = None) -> Any:
+        """Create an LLM client based on the provider.
+        
+        Args:
+            provider: The LLM provider (openai, anthropic, azure)
+            config: Configuration for the client
+            
+        Returns:
+            An LLM client instance
+        """
+        # Use LLMConfig if no provider or config is provided
+        if provider is None:
+            provider = LLMConfig.get_provider()
+        
+        if config is None:
+            config = LLMConfig.get_config(provider)
+        
+        if provider == "openai":
+            return OpenAIChatCompletionClient(
+                model=config.get('model', 'gpt-3.5-turbo-0125'),
+                api_key=os.getenv("OPENAI_API_KEY"),
+                temperature=config.get('temperature', 0.7),
+                max_tokens=config.get('max_tokens', 4000)
+            )
+        elif provider == "anthropic":
+            return AnthropicCompletionClient(
+                model=config.get('model', 'claude-3-sonnet-20240229'),
+                api_key=os.getenv("ANTHROPIC_API_KEY"),
+                temperature=config.get('temperature', 0.7),
+                max_tokens=config.get('max_tokens', 4000)
+            )
+        elif provider == "azure":
+            return AzureChatCompletionClient(
+                deployment_name=config.get('deployment_name'),
+                api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                api_version=config.get('api_version', '2023-05-15'),
+                azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+                temperature=config.get('temperature', 0.7),
+                max_tokens=config.get('max_tokens', 4000)
+            )
+        else:
+            raise ValueError(f"Unsupported LLM provider: {provider}")
+
 class OrchestratorM1:
     """Orchestrator agent using Magentic-One framework."""
     
@@ -32,11 +84,16 @@ class OrchestratorM1:
         Args:
             config: Optional configuration dictionary
         """
-        self.config = config or {}
-        self.client = OpenAIChatCompletionClient(
-            model=self.config.get('model', 'gpt-3.5-turbo-0125'),
-            api_key=os.getenv("OPENAI_API_KEY")
-        )
+        # Use LLMConfig if no config is provided
+        self.config = config or LLMConfig.get_agent_config()
+        
+        # Get LLM provider and config
+        llm_provider = self.config.get('llm_provider')
+        llm_config = self.config.get('llm_config')
+        
+        # Create LLM client using factory
+        self.client = LLMClientFactory.create_client(llm_provider, llm_config)
+        
         self.code_executor = LocalCommandLineCodeExecutor()
         self.m1 = MagenticOne(
             client=self.client,

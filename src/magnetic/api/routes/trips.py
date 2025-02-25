@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 import logging
 from contextlib import asynccontextmanager
+import os
 
 from ...database import get_db
 from ...models.trip import Trip, TripStatus
@@ -12,6 +13,7 @@ from ...services.trip_planner import TripPlanner
 from ...agents.websurfer_m1 import WebSurferM1
 from ...agents.filesurfer_m1 import FileSurferM1
 from ...agents.orchestrator_m1 import OrchestratorM1
+from ...config.llm_config import LLMConfig
 from ..schemas import (
     TripCreate,
     TripUpdate,
@@ -28,10 +30,13 @@ router = APIRouter(prefix="/api/trips", tags=["trips"])
 
 async def get_trip_planner() -> TripPlanner:
     """Get TripPlanner instance with M1 agents."""
-    # Initialize M1 agents
-    websurfer = WebSurferM1()
-    orchestrator = OrchestratorM1()
-    filesurfer = FileSurferM1(m1=orchestrator.m1)
+    # Get agent configuration from LLMConfig
+    agent_config = LLMConfig.get_agent_config()
+    
+    # Initialize M1 agents with configuration
+    websurfer = WebSurferM1(config=agent_config)
+    orchestrator = OrchestratorM1(config=agent_config)
+    filesurfer = FileSurferM1(config=agent_config)
     
     await websurfer.initialize()
     await orchestrator.initialize()

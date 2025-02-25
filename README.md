@@ -1,161 +1,147 @@
-# US Family Trip Planner
+# Magnetic - Multi-Agent Trip Planning System
 
-A comprehensive travel planning system built with Python, FastAPI, and React, using Magnetic-One's multi-agent architecture for intelligent trip planning. This project leverages the [Magnetic-One framework](https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/magentic-one.html), a generalist multi-agent system developed by Microsoft Research for solving complex tasks.
+Magnetic is a sophisticated trip planning system using multi-agent architecture with Magentic-One framework integration. It helps users plan and organize their trips with AI-driven recommendations and comprehensive itineraries.
 
-## 🌟 Features
+## Features
 
-- **Intelligent Trip Planning**: Utilizes AI agents to create personalized travel itineraries
-- **Multi-Agent Architecture**: Leverages specialized agents for different aspects of trip planning
-  - Orchestrator Agent: Coordinates planning activities
-  - WebSurfer Agent: Gathers real-time travel information
-  - FileSurfer Agent: Manages document processing
-- **Real-Time Data Integration**:
-  - Weather forecasts
-  - Flight availability
-  - Hotel pricing
-  - Local attractions
-- **Family-Focused Planning**:
-  - Age-appropriate activities
-  - Family-friendly accommodations
-  - Accessible transportation options
-  - Budget management
+- **Multi-Agent Architecture**: Orchestrator, WebSurfer, and FileSurfer agents working together
+- **Trip Planning**: Create detailed trip itineraries with activities, accommodations, and budgets
+- **Document Generation**: Generate travel guides, itineraries, and emergency information
+- **Real-Time Monitoring**: Monitor weather, flight status, and other travel-related information
+- **Multiple LLM Support**: Use OpenAI, Anthropic, or Azure OpenAI models
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
 - Python 3.9+
-- Node.js 16+
-- Docker and Docker Compose
 - PostgreSQL
 - Redis
+- Node.js and npm (for frontend)
 
-### Environment Setup
+### Installation
 
 1. Clone the repository:
-```bash
-git clone https://github.com/padak/magnetic.git
-cd magnetic
-```
+   ```bash
+   git clone https://github.com/yourusername/magnetic.git
+   cd magnetic
+   ```
 
 2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: .\venv\Scripts\activate
-```
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-playwright install --with-deps chromium
-```
+3. Install backend dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-4. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your API keys and configuration
-```
+4. Install Playwright dependencies:
+   ```bash
+   playwright install --with-deps chromium
+   ```
 
-### Database Setup
+5. Install frontend dependencies:
+   ```bash
+   cd frontend
+   npm install
+   cd ..
+   ```
 
-1. Start the Docker containers:
-```bash
-docker-compose up -d
-```
+6. Create a `.env` file based on `.env.example`:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys and configuration
+   ```
 
-2. Run database migrations:
-```bash
-alembic upgrade head
-```
+7. Initialize the database:
+   ```bash
+   alembic upgrade head
+   ```
 
 ### Running the Application
 
 1. Start the backend server:
-```bash
-uvicorn magnetic.api.main:app --reload
-```
+   ```bash
+   uvicorn src.magnetic.api.main:app --reload
+   ```
 
 2. Start the frontend development server:
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+3. Access the application at http://localhost:5173
+
+## Using Different LLM Providers
+
+Magnetic supports multiple LLM providers. You can configure which provider to use in the `.env` file:
+
+### OpenAI
+
+```
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-3.5-turbo-0125
+```
+
+### Anthropic
+
+```
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your-anthropic-api-key
+ANTHROPIC_MODEL=claude-3-sonnet-20240229
+```
+
+### Azure OpenAI
+
+```
+LLM_PROVIDER=azure
+AZURE_OPENAI_API_KEY=your-azure-openai-api-key
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com
+AZURE_DEPLOYMENT_NAME=your-deployment-name
+AZURE_API_VERSION=2023-05-15
+```
+
+### Testing LLM Providers
+
+You can test different LLM providers using the provided script:
+
 ```bash
-cd frontend/magnetic-ui
-npm install
-npm run dev
+python scripts/test_llm_providers.py --provider openai
 ```
 
-## 🏗️ Project Structure
+Options for `--provider` are: `openai`, `anthropic`, `azure`, or `all` to test all providers.
 
-```
-magnetic/
-├── src/
-│   └── magnetic/
-│       ├── agents/         # AI agent implementations
-│       ├── api/           # FastAPI application
-│       ├── config/        # Configuration management
-│       ├── models/        # Database models
-│       ├── services/      # Business logic services
-│       └── utils/         # Utility functions
-├── frontend/
-│   └── magnetic-ui/      # React frontend application
-├── tests/                # Test suite
-├── docs/                 # Documentation
-├── migrations/           # Database migrations
-└── scripts/             # Utility scripts
-```
+## Project Structure
 
-## 🔧 Configuration
+- `src/magnetic/`: Backend code
+  - `agents/`: Agent implementations
+  - `api/`: FastAPI endpoints
+  - `config/`: Configuration
+  - `models/`: Database models
+  - `services/`: Business logic
+  - `templates/`: Document templates
+  - `utils/`: Utility functions
+- `frontend/`: React frontend
+  - `src/`: Frontend source code
+  - `public/`: Static assets
+- `scripts/`: Utility scripts
+- `docs/`: Documentation
+- `tests/`: Test suite
 
-The application uses several external APIs:
-- OpenAI API for AI capabilities
-- Amadeus API for travel data
-- Google Maps API for location services
-- Open-Meteo API for weather forecasts
-
-Configure these in your `.env` file.
-
-## 🧪 Testing
-
-Run the test suite:
-```bash
-pytest
-```
-
-Test API integrations:
-```bash
-python scripts/test_apis.py
-```
-
-## 📚 Documentation
-
-- API documentation is available at `/docs` when running the server
-- Additional documentation can be found in the `docs/` directory
-
-## 🛠️ Development
-
-1. Create a new branch for your feature:
-```bash
-git checkout -b feature/your-feature-name
-```
-
-2. Make your changes and commit:
-```bash
-git add .
-git commit -m "Add your feature"
-```
-
-3. Push your changes:
-```bash
-git push origin feature/your-feature-name
-```
-
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+2. Create a feature branch: `git checkout -b feature-name`
+3. Commit your changes: `git commit -m 'Add some feature'`
+4. Push to the branch: `git push origin feature-name`
+5. Submit a pull request
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
