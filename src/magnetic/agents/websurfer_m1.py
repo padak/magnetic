@@ -120,6 +120,15 @@ class WebSurferM1:
             self.client = self.client_config["client"]
         
         self.code_executor = LocalCommandLineCodeExecutor()
+        
+        # Add model_info attribute to client to make it compatible with MagenticOne
+        if not hasattr(self.client, 'model_info'):
+            self.client.model_info = {
+                "function_calling": True,
+                "json_output": True,
+                "vision": False
+            }
+            
         self.m1 = MagenticOne(
             client=self.client,
             code_executor=self.code_executor
