@@ -2,8 +2,11 @@
 
 from typing import Any, Dict, List, Optional, Set
 from dataclasses import dataclass, field
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 import asyncio
+import os
+import logging
+import json
 
 from .base import BaseAgent
 
@@ -15,7 +18,7 @@ class Task:
     type: str
     status: str = "pending"
     priority: int = 1
-    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     assigned_to: Optional[str] = None
@@ -81,7 +84,7 @@ class TaskLedger:
         return sorted(tasks, key=lambda t: (
             -t.priority,  # Higher priority first
             not bool(t.deadline),  # Tasks with deadlines first
-            t.deadline or datetime.max.replace(tzinfo=UTC),  # Earlier deadlines first
+            t.deadline or datetime.max.replace(tzinfo=timezone.utc),  # Earlier deadlines first
             t.created_at  # Earlier creation time first
         ))
     
@@ -137,7 +140,7 @@ class OrchestratorAgent(BaseAgent):
         self.update_state({
             "active_agents": [],
             "task_count": 0,
-            "start_time": datetime.now(UTC).isoformat(),
+            "start_time": datetime.now(timezone.utc).isoformat(),
             "performance_metrics": {
                 "tasks_completed": 0,
                 "tasks_failed": 0,
@@ -186,7 +189,7 @@ class OrchestratorAgent(BaseAgent):
     
     async def _execute_task(self, task: Task) -> Dict[str, Any]:
         """Execute a single task with retries and error handling."""
-        start_time = datetime.now(UTC)
+        start_time = datetime.now(timezone.utc)
         
         # Find appropriate agent
         agent_name = task.data.get("agent")
@@ -214,7 +217,7 @@ class OrchestratorAgent(BaseAgent):
         while task.retries <= task.max_retries:
             try:
                 result = await agent.execute(task.data)
-                end_time = datetime.now(UTC)
+                end_time = datetime.now(timezone.utc)
                 execution_time = (end_time - start_time).total_seconds()
                 
                 # Update task metrics
@@ -253,7 +256,7 @@ class OrchestratorAgent(BaseAgent):
             except Exception as e:
                 task.retries += 1
                 task.error_history.append({
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "error": str(e),
                     "retry_count": task.retries
                 })

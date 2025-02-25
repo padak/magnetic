@@ -12,9 +12,14 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from jinja2 import Environment, FileSystemLoader
 
-from autogen_ext.models.openai import OpenAIChatCompletionClient
+# Import directly from OpenAI instead of autogen_ext.models.openai
+import openai
+from openai import OpenAI
 from autogen_ext.teams.magentic_one import MagenticOne
 from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+
+# Import LLM client factory
+from .orchestrator_m1 import LLMClientFactory
 
 class FileSystemHandler(FileSystemEventHandler):
     """Handler for file system events."""
@@ -41,33 +46,53 @@ class FileSystemHandler(FileSystemEventHandler):
 class FileSurferM1:
     """FileSurfer agent using Magentic-One framework."""
     
-    def __init__(self, m1: MagenticOne, templates_dir: Optional[str] = None, output_dir: Optional[str] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, templates_dir: Optional[str] = None, output_dir: Optional[str] = None):
         """Initialize the FileSurfer agent.
         
         Args:
-            m1: MagenticOne instance for AI capabilities
+            config: Optional configuration dictionary
             templates_dir: Directory containing document templates
             output_dir: Directory for generated documents
         """
-        self.m1 = m1
+        self.config = config or {}
         
-        # Set up template environment
-        if templates_dir is None:
-            templates_dir = os.path.join(os.path.dirname(__file__), '..', 'templates')
-        self.templates_dir = Path(templates_dir)
-        self.templates_dir.mkdir(parents=True, exist_ok=True)
+        # Get LLM provider from config or default to OpenAI
+        llm_provider = self.config.get('llm_provider', 'openai')
+        llm_config = self.config.get('llm_config', {})
         
-        # Set up output directory
-        if output_dir is None:
-            output_dir = os.path.join(os.path.dirname(__file__), '..', 'output')
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        # Create LLM client using factory
+        self.client_config = LLMClientFactory.create_client(llm_provider, llm_config)
         
-        # Initialize Jinja2 environment
-        self.jinja_env = Environment(
-            loader=FileSystemLoader(str(self.templates_dir)),
-            autoescape=True
+        # Create OpenAI client directly if needed
+        if llm_provider == "openai":
+            self.client = self.client_config["client"]
+        elif llm_provider == "anthropic":
+            self.client = self.client_config["client"]
+        else:
+            self.client = self.client_config["client"]
+        
+        self.code_executor = LocalCommandLineCodeExecutor()
+        self.m1 = MagenticOne(
+            client=self.client,
+            code_executor=self.code_executor
         )
+        
+        # Set up template and output directories
+        self.templates_dir = templates_dir or os.path.join(os.path.dirname(__file__), '../../templates')
+        self.output_dir = output_dir or os.path.join(os.path.dirname(__file__), '../../output')
+        
+        # Ensure directories exist
+        os.makedirs(self.templates_dir, exist_ok=True)
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+        # Set up Jinja2 environment
+        self.jinja_env = Environment(
+            loader=FileSystemLoader(self.templates_dir),
+            autoescape=jinja2.select_autoescape(['html', 'xml'])
+        )
+        
+        # Set up file monitoring
+        self.observer = None
         
         # Initialize file system observer
         self.observer = Observer()

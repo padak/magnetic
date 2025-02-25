@@ -2,7 +2,7 @@
 
 import pytest
 import pytest_asyncio
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 import asyncio
 

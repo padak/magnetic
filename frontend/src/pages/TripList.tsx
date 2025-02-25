@@ -7,13 +7,12 @@ import {
   Grid,
   Heading,
   Text,
-  useToast,
   Select,
   Badge,
   VStack,
   HStack,
-  Link,
   Icon,
+  useToast
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { tripService } from '../api/tripService';
@@ -90,9 +89,14 @@ const TripList = () => {
           </HStack>
         )}
         
-        <Link as={RouterLink} to={`/trips/${trip.id}`}>
-          <Button size="sm" colorScheme="blue">View Details</Button>
-        </Link>
+        <Button 
+          as={RouterLink} 
+          to={`/trips/${trip.id}`}
+          size="sm" 
+          colorScheme="blue"
+        >
+          View Details
+        </Button>
       </VStack>
     </Box>
   );
@@ -109,7 +113,7 @@ const TripList = () => {
       <Flex mb={4}>
         <Select
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatus(e.target.value)}
           placeholder="Filter by status"
           maxW="200px"
         >
@@ -137,13 +141,13 @@ const TripList = () => {
             <Flex justify="center" gap={2}>
               <Button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                isDisabled={page === 1}
+                disabled={page === 1}
               >
                 Previous
               </Button>
               <Button
                 onClick={() => setPage((p) => p + 1)}
-                isDisabled={page * 10 >= data.total}
+                disabled={page * 10 >= data.total}
               >
                 Next
               </Button>

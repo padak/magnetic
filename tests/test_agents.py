@@ -1,7 +1,7 @@
 """Tests for the agent system."""
 
 import pytest
-from datetime import datetime, UTC, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any
 import asyncio
 from unittest.mock import AsyncMock
@@ -179,7 +179,7 @@ async def test_task_prioritization():
     orchestrator = OrchestratorAgent()
     await orchestrator.initialize()
     
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     future = now + timedelta(hours=1)
     far_future = now + timedelta(hours=2)
     

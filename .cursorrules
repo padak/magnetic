@@ -4,4 +4,10 @@ Use pip to install the dependencies via requirements.txt.
 
 Use pip freeze > requirements.txt to freeze the dependencies.
 
+Backend services (database, API) run in Docker containers. Use docker-compose for managing these services.
+
+For database migrations, run alembic commands inside the appropriate Docker container.
+
+Frontend development can be done locally using the virtual environment.
+
 When you're done with some tangible task, commit the changes to the repository and also update work_plan.md.

@@ -11,9 +11,14 @@ import time
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 import hashlib
 
-from autogen_ext.models.openai import OpenAIChatCompletionClient
+# Import directly from OpenAI instead of autogen_ext.models.openai
+import openai
+from openai import OpenAI
 from autogen_ext.teams.magentic_one import MagenticOne
 from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+
+# Import LLM client factory
+from .orchestrator_m1 import LLMClientFactory
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -91,20 +96,46 @@ class RateLimiter:
 class WebSurferM1:
     """WebSurfer agent using Magentic-One framework."""
     
-    def __init__(self) -> None:
-        """Initialize the WebSurfer agent."""
-        self.client = OpenAIChatCompletionClient(
-            model="gpt-3.5-turbo-0125",
-            api_key=os.getenv("OPENAI_API_KEY")
-        )
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+        """Initialize the WebSurfer agent.
+        
+        Args:
+            config: Optional configuration dictionary
+        """
+        self.config = config or {}
+        
+        # Get LLM provider from config or default to OpenAI
+        llm_provider = self.config.get('llm_provider', 'openai')
+        llm_config = self.config.get('llm_config', {})
+        
+        # Create LLM client using factory
+        self.client_config = LLMClientFactory.create_client(llm_provider, llm_config)
+        
+        # Create OpenAI client directly if needed
+        if llm_provider == "openai":
+            self.client = self.client_config["client"]
+        elif llm_provider == "anthropic":
+            self.client = self.client_config["client"]
+        else:
+            self.client = self.client_config["client"]
+        
         self.code_executor = LocalCommandLineCodeExecutor()
         self.m1 = MagenticOne(
             client=self.client,
             code_executor=self.code_executor
         )
-        self._browser = None
-        self.rate_limiter = RateLimiter(calls_per_minute=1)  # More conservative rate limit
-        self.cache = Cache(ttl_seconds=3600)  # Cache results for 1 hour
+        
+        # Initialize cache and rate limiter
+        self.cache = Cache(ttl_seconds=self.config.get('cache_ttl', 3600))
+        self.rate_limiter = RateLimiter(
+            calls_per_minute=self.config.get('calls_per_minute', 1)
+        )
+        
+        # Initialize browser and context
+        self.playwright = None
+        self.browser = None
+        self.context = None
+        self.page = None
         
         # Initialize state
         self.state = {
@@ -126,21 +157,23 @@ class WebSurferM1:
     async def initialize(self) -> None:
         """Initialize resources."""
         playwright = await async_playwright().start()
-        self._browser = await playwright.chromium.launch()
+        self.browser = await playwright.chromium.launch()
+        self.context = await self.browser.new_context()
+        self.page = await self.context.new_page()
         
     async def cleanup(self) -> None:
         """Clean up resources."""
         logger.info("Starting WebSurferM1 cleanup...")
         
         try:
-            if self._browser:
+            if self.browser:
                 logger.debug("Closing browser...")
                 try:
-                    await self._browser.close()
+                    await self.browser.close()
                 except Exception as e:
                     logger.error(f"Error closing browser: {e}")
                 finally:
-                    self._browser = None
+                    self.browser = None
             
             # Clean up any active tasks or operations
             tasks = []
@@ -177,23 +210,19 @@ class WebSurferM1:
         
     async def web_scrape(self, url: str, selectors: Dict[str, str]) -> Dict[str, Any]:
         """Scrape content from a webpage."""
-        page = await self._browser.new_page()
-        try:
-            await page.goto(url)
-            data = {}
-            for key, selector in selectors.items():
-                element = await page.query_selector(selector)
-                if element:
-                    data[key] = await element.text_content()
-                else:
-                    data[key] = None
-            return {
-                'url': url,
-                'timestamp': datetime.now().isoformat(),
-                'data': data
-            }
-        finally:
-            await page.close()
+        await self.page.goto(url)
+        data = {}
+        for key, selector in selectors.items():
+            element = await self.page.query_selector(selector)
+            if element:
+                data[key] = await element.text_content()
+            else:
+                data[key] = None
+        return {
+            'url': url,
+            'timestamp': datetime.now().isoformat(),
+            'data': data
+        }
             
     async def get_weather(self, location: str) -> Dict[str, Any]:
         """Get weather information for a location."""

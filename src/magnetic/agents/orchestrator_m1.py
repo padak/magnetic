@@ -3,14 +3,20 @@
 from typing import Dict, List, Optional, Any
 import asyncio
 import os
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 import logging
 import json
 
-from autogen_ext.models.openai import OpenAIChatCompletionClient
-from autogen_ext.models.anthropic import AnthropicCompletionClient
-from autogen_ext.models.azure import AzureChatCompletionClient
+# Import directly from OpenAI instead of autogen_ext.models.openai
+import openai
+from openai import OpenAI
+# Import directly from Anthropic instead of autogen_ext.models.anthropic
+import anthropic
+# Import Azure SDK directly
+from azure.core.credentials import AzureKeyCredential
+from azure.ai.ml import MLClient
+
 from autogen_ext.teams.magentic_one import MagenticOne
 from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
 
@@ -50,28 +56,47 @@ class LLMClientFactory:
             config = LLMConfig.get_config(provider)
         
         if provider == "openai":
-            return OpenAIChatCompletionClient(
-                model=config.get('model', 'gpt-3.5-turbo-0125'),
-                api_key=os.getenv("OPENAI_API_KEY"),
-                temperature=config.get('temperature', 0.7),
-                max_tokens=config.get('max_tokens', 4000)
+            # Create OpenAI client directly
+            client = OpenAI(
+                api_key=os.getenv("OPENAI_API_KEY")
             )
+            # Return a client wrapper compatible with autogen_ext
+            return {
+                "client": client,
+                "model": config.get('model', 'gpt-3.5-turbo-0125'),
+                "temperature": config.get('temperature', 0.7),
+                "max_tokens": config.get('max_tokens', 4000)
+            }
         elif provider == "anthropic":
-            return AnthropicCompletionClient(
-                model=config.get('model', 'claude-3-sonnet-20240229'),
-                api_key=os.getenv("ANTHROPIC_API_KEY"),
-                temperature=config.get('temperature', 0.7),
-                max_tokens=config.get('max_tokens', 4000)
+            # Create Anthropic client directly
+            client = anthropic.Anthropic(
+                api_key=os.getenv("ANTHROPIC_API_KEY")
             )
+            # Return a client wrapper compatible with autogen_ext
+            return {
+                "client": client,
+                "model": config.get('model', 'claude-3-sonnet-20240229'),
+                "temperature": config.get('temperature', 0.7),
+                "max_tokens": config.get('max_tokens', 4000)
+            }
         elif provider == "azure":
-            return AzureChatCompletionClient(
-                deployment_name=config.get('deployment_name'),
-                api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-                api_version=config.get('api_version', '2023-05-15'),
-                azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-                temperature=config.get('temperature', 0.7),
-                max_tokens=config.get('max_tokens', 4000)
+            # Create Azure client directly
+            credential = AzureKeyCredential(os.getenv("AZURE_OPENAI_API_KEY"))
+            client = MLClient(
+                credential=credential,
+                subscription_id=os.getenv("AZURE_SUBSCRIPTION_ID"),
+                resource_group_name=os.getenv("AZURE_RESOURCE_GROUP"),
+                workspace_name=os.getenv("AZURE_WORKSPACE_NAME")
             )
+            # Return a client wrapper compatible with autogen_ext
+            return {
+                "client": client,
+                "deployment_name": config.get('deployment_name'),
+                "api_version": config.get('api_version', '2023-05-15'),
+                "azure_endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),
+                "temperature": config.get('temperature', 0.7),
+                "max_tokens": config.get('max_tokens', 4000)
+            }
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
 
@@ -92,7 +117,15 @@ class OrchestratorM1:
         llm_config = self.config.get('llm_config')
         
         # Create LLM client using factory
-        self.client = LLMClientFactory.create_client(llm_provider, llm_config)
+        self.client_config = LLMClientFactory.create_client(llm_provider, llm_config)
+        
+        # Create OpenAI client directly if needed
+        if llm_provider == "openai":
+            self.client = self.client_config["client"]
+        elif llm_provider == "anthropic":
+            self.client = self.client_config["client"]
+        else:
+            self.client = self.client_config["client"]
         
         self.code_executor = LocalCommandLineCodeExecutor()
         self.m1 = MagenticOne(
@@ -104,7 +137,7 @@ class OrchestratorM1:
         self.state = {
             "active_agents": [],
             "task_count": 0,
-            "start_time": datetime.now(UTC).isoformat(),
+            "start_time": datetime.now(timezone.utc).isoformat(),
             "performance_metrics": {
                 "tasks_completed": 0,
                 "tasks_failed": 0,
@@ -143,7 +176,7 @@ class OrchestratorM1:
             "id": task_id,
             "type": task["type"],
             "status": "in_progress",
-            "started_at": datetime.now(),
+            "started_at": datetime.now(timezone.utc),
             "data": task.get("data", {}),
             "error": None,
             "result": None,
@@ -156,18 +189,18 @@ class OrchestratorM1:
             result = await self._execute_task(task_id, task)
             task_info["status"] = "completed"
             task_info["result"] = result
-            task_info["completed_at"] = datetime.now()
+            task_info["completed_at"] = datetime.now(timezone.utc).isoformat()
             return result
         except Exception as e:
             task_info["status"] = "failed"
             task_info["error"] = str(e)
-            task_info["completed_at"] = datetime.now()
+            task_info["completed_at"] = datetime.now(timezone.utc).isoformat()
             self.state["performance_metrics"]["tasks_failed"] += 1
             raise
 
     async def _execute_task(self, task_id: str, task: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single task with retry logic."""
-        start_time = datetime.now(UTC)
+        start_time = datetime.now(timezone.utc)
         retries = 0
         max_retries = task.get('max_retries', self.config.get('max_retries', 3))
         
@@ -209,7 +242,7 @@ class OrchestratorM1:
                     parsed_result = {'error': 'Invalid JSON response', 'raw_response': result}
                 
                 # Update task metrics
-                end_time = datetime.now(UTC)
+                end_time = datetime.now(timezone.utc)
                 execution_time = (end_time - start_time).total_seconds()
                 self.tasks[task_id]["metrics"].execution_time = execution_time
                 self.tasks[task_id]["metrics"].retries = retries
@@ -230,7 +263,7 @@ class OrchestratorM1:
                 error_info = {
                     "error": str(e),
                     "error_type": type(e).__name__,
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "retry_count": retries,
                     "task_data": task
                 }

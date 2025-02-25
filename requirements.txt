@@ -1,11 +1,16 @@
 # Core dependencies
 autogen-agentchat>=0.2.0
-autogen-ext[magentic-one,openai]>=0.2.0
+autogen-ext==0.4.7
 pyautogen>=0.2.0
-autogen-core>=0.2.0
+autogen-core==0.4.7
 autogen>=0.2.0  # Added for code executors
 python-dotenv>=1.0.0
 tenacity>=8.2.3  # Added for retry logic
+
+# LLM providers
+anthropic>=0.8.0  # Claude API
+azure-identity>=1.15.0  # Azure authentication
+azure-ai-ml>=1.12.0  # Azure ML
 
 # Web automation
 playwright>=1.40
